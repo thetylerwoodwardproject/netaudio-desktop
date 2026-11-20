@@ -17,6 +17,7 @@ from . import clock as clk  # noqa: E402
 from .api import DEFAULT_PORT, ApiError, Client, ensure_daemon  # noqa: E402
 
 APP_ID = "app.netaudio.Desktop"
+ICON_NAME = "app.netaudio.Desktop"   # data/app.netaudio.Desktop.svg
 CONFIG = Path(GLib.get_user_config_dir()) / "netaudio-desktop" / "config.json"
 POLL_SECONDS = 3
 SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000]
@@ -761,6 +762,13 @@ class App(Adw.Application):
     def do_startup(self):
         Adw.Application.do_startup(self)
         from gi.repository import Gdk
+        # Use our own icon even when running from a source checkout (not installed system-wide).
+        theme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default())
+        for d in (Path(__file__).resolve().parent.parent / "data",
+                  Path(os.environ.get("SNAP", "/nonexistent")) / "usr/share/icons/hicolor/scalable/apps"):
+            if d.is_dir():
+                theme.add_search_path(str(d))
+        Gtk.Window.set_default_icon_name(ICON_NAME)
         css = Gtk.CssProvider()
         css.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
@@ -802,7 +810,7 @@ class App(Adw.Application):
         PrefsDialog(self.cfg, save).present(self.win)
 
     def _about(self, *_):
-        Adw.AboutDialog(application_name="NetAudio Desktop", application_icon="network-transmit-receive-symbolic",
+        Adw.AboutDialog(application_name="NetAudio Desktop", application_icon=ICON_NAME,
                         version=__version__, developer_name="Unofficial",
                         comments="A native Linux front end for the NetAudio daemon "
                                  "(chris-ritsen/network-audio-controller). Not affiliated with Audinate.",
