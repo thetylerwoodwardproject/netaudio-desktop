@@ -22,8 +22,8 @@ Or just run `./netaudio-desktop`. Settings (port, auto-start) are in the app men
 (default port 4780, stored in `~/.config/netaudio-desktop/config.json`).
 
 ## Packages
-Tagged releases (`vX.Y.Z`) build and attach to the GitHub Release:
-- `netaudio-desktop_X.Y.Z_all.deb` — `sudo apt install ./netaudio-desktop_*.deb` (install the daemon separately: `uv tool install netaudio`)
+Tagged releases (`vYYYY.MM.DD`) build and attach to the GitHub Release:
+- `netaudio-desktop_YYYY.MM.DD_all.deb` — `sudo apt install ./netaudio-desktop_*.deb` (install the daemon separately: `uv tool install netaudio`)
 - `netaudio-desktop_*.snap` — `sudo snap install --dangerous ./netaudio-desktop_*.snap` (bundles the daemon)
 - Python wheel/sdist — `pipx install netaudio-desktop` (needs the GTK4/libadwaita system packages above)
 
