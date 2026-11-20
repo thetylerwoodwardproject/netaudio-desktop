@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=NetAudio
+Comment=Discover and route Dante audio devices
+Exec=@EXEC@
+Icon=app.netaudio.Desktop
+Terminal=false
+Categories=AudioVideo;
+Keywords=Dante;Audinate;audio;routing;network;
+StartupWMClass=app.netaudio.Desktop
+Actions=demo;
+
+[Desktop Action demo]
+Name=Demo Mode (simulated devices)
+Exec=@EXEC@ --demo
