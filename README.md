@@ -175,6 +175,16 @@ and does all requests off the main thread so the UI stays responsive.
 **Your files:** settings in `~/.config/netaudio-desktop/config.json`; presets in
 `~/.local/share/netaudio-desktop/presets/` (one `.xml` plus a small `.json` sidecar each).
 
+## 🩹 Troubleshooting
+
+- **The app icon doesn't show on COSMIC / Pop!_OS** (generic icon in the dock or app list): re-run `./install.sh`.
+  COSMIC ignores a per-user icon folder that has no `index.theme`; the installer now creates one and points the launcher
+  at the icon by path. If the panel still shows a stale icon, log out and back in (or restart the panel) so it re-reads the
+  launcher.
+- **"Cannot reach daemon":** install it with `uv tool install netaudio`, or check the port in Preferences (default `4780`).
+- **No devices appear:** make sure this computer is on the Dante network, and pick the right interface from the
+  status bar (☰ → *Network interface…*). Try **Demo mode** to confirm the app itself is fine.
+
 ## 🛠️ Building packages
 
 | Package | Command |

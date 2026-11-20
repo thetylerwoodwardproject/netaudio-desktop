@@ -10,16 +10,67 @@ if ((${#missing[@]})); then
   echo "Missing GUI packages. Run: sudo apt install ${missing[*]}" >&2; exit 1
 fi
 
-install -Dm644 "$here/data/app.netaudio.Desktop.svg" \
-  "$HOME/.local/share/icons/hicolor/scalable/apps/app.netaudio.Desktop.svg"
+icons="$HOME/.local/share/icons/hicolor"
+install -Dm644 "$here/data/app.netaudio.Desktop.svg" "$icons/scalable/apps/app.netaudio.Desktop.svg"
 for png in "$here"/data/icons/hicolor/*/apps/app.netaudio.Desktop.png; do
   size="$(basename "$(dirname "$(dirname "$png")")")"
-  install -Dm644 "$png" "$HOME/.local/share/icons/hicolor/$size/apps/app.netaudio.Desktop.png"
+  install -Dm644 "$png" "$icons/$size/apps/app.netaudio.Desktop.png"
 done
-sed "s|@EXEC@|$here/netaudio-desktop|" "$here/data/app.netaudio.Desktop.desktop" \
-  > "$HOME/.local/share/applications/app.netaudio.Desktop.desktop"
+
+# Some desktops (notably COSMIC / Pop!_OS) ignore an icon theme directory that has no index.theme,
+# so a bare ~/.local/share/icons/hicolor makes the icon invisible there. Provide one.
+if [ ! -f "$icons/index.theme" ]; then
+  if [ -f /usr/share/icons/hicolor/index.theme ]; then
+    cp /usr/share/icons/hicolor/index.theme "$icons/index.theme"
+  else
+    cat > "$icons/index.theme" <<'THEME'
+[Icon Theme]
+Name=Hicolor
+Comment=Fallback icon theme
+Directories=48x48/apps,64x64/apps,128x128/apps,256x256/apps,512x512/apps,scalable/apps
+
+[48x48/apps]
+Size=48
+Context=Applications
+Type=Threshold
+
+[64x64/apps]
+Size=64
+Context=Applications
+Type=Threshold
+
+[128x128/apps]
+Size=128
+Context=Applications
+Type=Threshold
+
+[256x256/apps]
+Size=256
+Context=Applications
+Type=Threshold
+
+[512x512/apps]
+Size=512
+Context=Applications
+Type=Threshold
+
+[scalable/apps]
+Size=128
+MinSize=1
+MaxSize=512
+Context=Applications
+Type=Scalable
+THEME
+  fi
+fi
+
+# Point the launcher at the installed PNG by absolute path so it shows even where theme lookup is picky.
+mkdir -p "$HOME/.local/share/applications"
+sed -e "s|@EXEC@|$here/netaudio-desktop|" \
+    -e "s|^Icon=.*|Icon=$icons/256x256/apps/app.netaudio.Desktop.png|" \
+    "$here/data/app.netaudio.Desktop.desktop" > "$HOME/.local/share/applications/app.netaudio.Desktop.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-gtk-update-icon-cache -q "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+gtk-update-icon-cache -f -t "$icons" 2>/dev/null || true
 echo "Installed launcher. Search for “NetAudio” in your app menu."
 
 if ! command -v netaudio-daemon >/dev/null && ! command -v netaudio >/dev/null; then
