@@ -27,9 +27,11 @@ Discover devices, patch channels in a routing matrix, and keep an eye on clock s
 
 | | |
 |---|---|
-| 🔀 **Routing matrix** | Receivers as rows, transmitters as columns. Click a cell to subscribe, click again to clear. One source per receive channel, kept in sync with the network every few seconds. |
+| 🔀 **Routing matrix** | Receivers as rows, transmitters as columns, with channel names on both axes (transmit names read vertically above each column). Click a cell to subscribe, click again to clear. One source per receive channel, kept in sync with the network every few seconds. |
 | ✏️ **Rename in place** | Click a receive channel name (row) or a transmit channel number (column header) to rename it right from the matrix. |
 | 🎚️ **Live meters** | Press the speaker button in the header to show level bars on every channel in the matrix and on device pages. Channel names turn green when **audio is present**; bars go amber when hot and red on clipping. Opt-in, since it asks devices to stream meter data. |
+| 🌐 **Pick your Dante network** | On first launch (when you have more than one network interface) the app asks which one your Dante devices are on — or two, for a redundant network. Change it any time from the status bar or the ☰ menu. |
+| 🔗 **Click through** | Click a device name in the routing matrix to jump straight to its page; a hover crosshair shows exactly which row and column you're about to patch. |
 | 🕒 **Clock & sync** | See each device’s clock role, sync state, frequency offset, drift, **who the grandmaster is** and who each device syncs to, plus per-port status. Toggle **Preferred leader** from the app. |
 | 📟 **Device details** | IP/MAC, sample rate, encoding, latency, channel counts. Rename devices, change sample rate, or flash a device’s identify light. |
 | 📊 **Status bar** | Daemon connection, devices online, route count and overall clock health (`grandmaster Stagebox-A · 5/5 in sync`) at a glance. |
@@ -99,6 +101,9 @@ netaudio-desktop --demo
 - **Rename channels** — click a channel label in the matrix, or edit it on the **Devices** page.
 - **Devices** — pick a device on the left for details, clock & sync, and settings.
 - **Meters** — the 🔊 button in the header turns live levels and signal-presence on or off (remembered between runs). Hover a channel for its exact dBFS.
+- **Network interface** — shown in the status bar (`Network: enp3s0`); click it, or use ☰ → *Network interface…*, to switch. Turn on *Ask every time I launch* if you move between networks.
+- **Open a device** — click its name in the matrix; **Show in Routing** on the device page takes you back. Use the search box to filter long device lists.
+- **Keyboard** — `Ctrl+1` Routing · `Ctrl+2` Devices · `Ctrl+F` search · `Ctrl+M` meters · `F5` rescan.
 - **Rescan** — `F5` or the ↻ button.
 - **Preferences** — daemon port (default `4780`) and auto-start, in the ☰ menu.
 

@@ -10,7 +10,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk, Pango  # noqa: E402
 
 from . import __version__  # noqa: E402
 from . import clock as clk  # noqa: E402
@@ -45,6 +45,12 @@ levelbar.meter.m-hot block.filled.high, levelbar.meter.m-hot block.filled.full {
 levelbar.meter.m-clip block.filled, levelbar.meter.m-clip block.filled.low,
 levelbar.meter.m-clip block.filled.high, levelbar.meter.m-clip block.filled.full { background: #e01b24; }
 .sig { color: #57e389; }
+.ch-name { font-size: smaller; }
+.statusbar button { padding: 0 6px; min-height: 0; min-width: 0; font-size: smaller; font-weight: normal; }
+.cell:hover { background: alpha(@accent_bg_color, 0.35); }
+.cell:checked:hover { background: #4a94ea; }
+.hl { background: alpha(@accent_bg_color, 0.3); border-radius: 4px; }
+.dev-link:hover { text-decoration: underline; }
 .axis-title { font-weight: bold; font-size: smaller; letter-spacing: 1px; opacity: 0.75;
               padding: 0 6px 4px 0; }
 .rx-dev { font-weight: bold; padding: 6px 8px 2px 0; }
@@ -136,13 +142,59 @@ def run_async(fn, done):
     threading.Thread(target=work, daemon=True).start()
 
 
+class VerticalLabel(Gtk.Widget):
+    """Text rotated to read bottom-to-top, for transmit channel names above matrix columns.
+    GTK4 labels cannot rotate, so this draws a Pango layout through the snapshot API."""
+    __gtype_name__ = "NetAudioVerticalLabel"
+
+    def __init__(self, text, length=96):
+        super().__init__()
+        self._text, self._length = text, length
+
+    def _layout(self, width_px=None):
+        lay = self.create_pango_layout(self._text)
+        if width_px:
+            lay.set_ellipsize(Pango.EllipsizeMode.END)
+            lay.set_width(int(width_px) * Pango.SCALE)
+        return lay
+
+    def natural_text_px(self):
+        return self._layout().get_pixel_size()[0]
+
+    def set_length(self, px):
+        if px != self._length:
+            self._length = px
+            self.queue_resize()
+
+    def do_measure(self, orientation, for_size):
+        if orientation == Gtk.Orientation.HORIZONTAL:
+            n = self._layout().get_pixel_size()[1] + 2          # rotated: text height is our width
+        else:
+            n = self._length
+        return (n, n, -1, -1)
+
+    def do_snapshot(self, snapshot):
+        w, h = self.get_width(), self.get_height()
+        if self.has_css_class("hl"):                             # hover crosshair
+            snapshot.append_color(Gdk.RGBA(red=0.21, green=0.52, blue=0.89, alpha=0.3),
+                                  Graphene.Rect().init(0, 0, w, h))
+        lay = self._layout(self._length)
+        th = lay.get_pixel_size()[1]
+        snapshot.save()
+        snapshot.translate(Graphene.Point().init((w - th) / 2, h))   # bottom edge, centred
+        snapshot.rotate(-90)                                          # text runs upward
+        snapshot.append_layout(lay, self.get_color())
+        snapshot.restore()
+
+
 class RoutingView(Gtk.ScrolledWindow):
     """Dante-Controller-style matrix: receivers as rows, transmitters as columns."""
 
-    def __init__(self, on_toggle, on_rename=None):
+    def __init__(self, on_toggle, on_rename=None, on_open=None):
         super().__init__(hexpand=True, vexpand=True)
         self.on_toggle = on_toggle
         self.on_rename = on_rename
+        self.on_open = on_open
         self.grid = Gtk.Grid(margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         self.set_child(self.grid)
         self.signature = None
@@ -193,21 +245,35 @@ class RoutingView(Gtk.ScrolledWindow):
                 j += 1
             head = Gtk.Label(label=dev.get("name") or dev["server_name"], xalign=0, ellipsize=3,
                              width_chars=1, max_width_chars=1)
-            head.set_tooltip_text(dev.get("name") or dev["server_name"])
             head.add_css_class("dev-head")
+            self._linkable(head, dev)
             self.grid.attach(head, i + 1, 1, j - i, 1)
             i = j
+        tx_lbls, name_widgets = [], []
         for ci, (d, n, ch) in enumerate(tx_cols):
             lbl = Gtk.Label(label=str(n))
+            tx_lbls.append(lbl)
+            name = VerticalLabel(ch_label(ch, n))
+            name.add_css_class("ch-name")
+            name_widgets.append(name)
+            lbl._peer = name
             lbl.add_css_class("ch-head")
             lbl.set_tooltip_text(f"{d.get('name') or d['server_name']} — {ch_label(ch, n)}\nClick to rename")
             self._renamable(lbl, "tx", d, n, ch)
             bar = make_meter(vertical=True, visible=self.meters_on)
             colbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER)
+            self._renamable(name, "tx", d, n, ch)
+            name.set_tooltip_text(lbl.get_tooltip_text())
+            colbox.append(name)
             colbox.append(bar)
             colbox.append(lbl)
             self.meters[("tx", d["server_name"], n)] = [bar, lbl, lbl.get_tooltip_text()]
             self.grid.attach(colbox, ci + 1, 2, 1, 1)
+        # Size every name to the longest one (capped) so the columns line up.
+        if name_widgets:
+            L = max(36, min(112, max(w.natural_text_px() for w in name_widgets) + 4))
+            for w in name_widgets:
+                w.set_length(L)
         # Axis titles: columns are transmitters (sources), rows are receivers (destinations).
         tx_title = Gtk.Label(label="TRANSMIT  →", xalign=0, hexpand=False)
         tx_title.add_css_class("axis-title")
@@ -225,6 +291,7 @@ class RoutingView(Gtk.ScrolledWindow):
                 last_dev = d
                 h = Gtk.Label(label=d.get("name") or d["server_name"], xalign=0)
                 h.add_css_class("rx-dev")
+                self._linkable(h, d)
                 self.grid.attach(h, 0, row, 1, 1)
                 row += 1
             rl = Gtk.Label(label=f"{n}  {ch_label(rch, n)}", xalign=0)
@@ -245,9 +312,33 @@ class RoutingView(Gtk.ScrolledWindow):
                 b.add_css_class("cell")
                 b.set_tooltip_text(f"{ch_label(rch, n)} ← {td.get('name') or td['server_name']}: {ch_label(tch, tn)}")
                 b.connect("toggled", self._toggled, d, n, td, tch, tn)
+                mc = Gtk.EventControllerMotion()
+                mc.connect("enter", lambda _c, _x, _y, a=rl, c=tx_lbls[ci]: self._hover(a, c, True))
+                mc.connect("leave", lambda _c, a=rl, c=tx_lbls[ci]: self._hover(a, c, False))
+                b.add_controller(mc)
                 self.grid.attach(b, ci + 1, row, 1, 1)
                 self.cells[(d["server_name"], n, td["server_name"], tn)] = b
             row += 1
+
+    @staticmethod
+    def _hover(row_label, col_label, on):
+        """Crosshair: highlight the receive row label and transmit column number under the pointer."""
+        for w in (row_label, col_label, getattr(col_label, "_peer", None)):
+            if w is not None:
+                (w.add_css_class if on else w.remove_css_class)("hl")
+                if isinstance(w, VerticalLabel):
+                    w.queue_draw()
+
+    def _linkable(self, widget, dev):
+        """Click a device name to open its page on the Devices tab."""
+        if not self.on_open:
+            return
+        widget.add_css_class("dev-link")
+        widget.set_cursor_from_name("pointer")
+        widget.set_tooltip_text(f"Open {dev.get('name') or dev['server_name']}")
+        g = Gtk.GestureClick(button=1)
+        g.connect("released", lambda *_: self.on_open(dev["server_name"]))
+        widget.add_controller(g)
 
     def _renamable(self, widget, kind, dev, num, ch):
         if not self.on_rename or ch.get("can_rename") is False:
@@ -302,11 +393,17 @@ class RoutingView(Gtk.ScrolledWindow):
             apply_meter(bar, dbfs, state)
             if getattr(lbl, "_sig", False) != present:
                 lbl._sig = present
-                (lbl.add_css_class if present else lbl.remove_css_class)("sig")
+                for w in (lbl, getattr(lbl, "_peer", None)):
+                    if w is not None:
+                        (w.add_css_class if present else w.remove_css_class)("sig")
+                        if isinstance(w, VerticalLabel):
+                            w.queue_draw()
             tip = f"{base}\n{mtr.describe(dbfs, state, present)}" if d and self.meters_on else base
             if getattr(bar, "_tip", None) != tip:
                 bar._tip = tip
                 lbl.set_tooltip_text(tip)
+                if getattr(lbl, "_peer", None) is not None:
+                    lbl._peer.set_tooltip_text(tip)
 
     def _sync_state(self, devices):
         by_name = {}
@@ -368,6 +465,9 @@ class DeviceDetail(Adw.PreferencesPage):
         name = d.get("name") or d["server_name"]
 
         info = Adw.PreferencesGroup(title=name, description=d["server_name"])
+        back = Gtk.Button(label="Show in Routing", valign=Gtk.Align.CENTER)
+        back.connect("clicked", lambda _b: self.win.stack.set_visible_child_name("routing"))
+        info.set_header_suffix(back)
         for title, val in [
             ("Status", "Online" if d.get("online") else "Offline"),
             ("IPv4", d.get("ipv4")), ("MAC address", d.get("mac_address")),
@@ -546,6 +646,8 @@ class Window(Adw.ApplicationWindow):
         super().__init__(application=app, title="NetAudio", default_width=1200, default_height=760)
         self.client, self.cfg = client, cfg
         self._gen = 0
+        self.iface = None                   # last /settings reply
+        self._iface_checked = False
         self.meters_on = False
         self.feed = None
         self._metered = set()
@@ -569,22 +671,36 @@ class Window(Adw.ApplicationWindow):
         self.spinner = Gtk.Spinner()
         header.pack_start(self.spinner)
         menu = Gio.Menu()
+        menu.append("Network interface…", "app.interface")
         menu.append("Demo mode", "app.demo")
         menu.append("Preferences", "app.preferences")
         menu.append("About NetAudio Desktop", "app.about")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, primary=True))
         tv.add_top_bar(header)
 
-        self.routing = RoutingView(self._route_toggled, self._rename_channel)
+        self.routing = RoutingView(self._route_toggled, self._rename_channel, self._open_device)
         self.stack.add_titled_with_icon(self.routing, "routing", "Routing", "network-transmit-receive-symbolic")
 
-        split = Adw.NavigationSplitView()
+        split = self.split = Adw.NavigationSplitView()
         self.dev_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
         self.dev_list.add_css_class("navigation-sidebar")
         self.dev_list.connect("row-selected", self._dev_selected)
-        side_page = Adw.NavigationPage(title="Devices", child=Gtk.ScrolledWindow(child=self.dev_list))
+        self.dev_list.set_filter_func(self._dev_filter)
+        self.dev_search = Gtk.SearchEntry(placeholder_text="Search devices", margin_top=8, margin_bottom=4,
+                                          margin_start=8, margin_end=8)
+        self.dev_search.connect("search-changed", lambda *_: self.dev_list.invalidate_filter())
+        side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        side.append(self.dev_search)
+        side.append(Gtk.ScrolledWindow(child=self.dev_list, vexpand=True))
+        side_page = Adw.NavigationPage(title="Devices", child=side)
         self.detail = DeviceDetail(self)
-        self.detail_page = Adw.NavigationPage(title="Device", child=self.detail)
+        self.detail_stack = Gtk.Stack()
+        self.detail_stack.add_named(Adw.StatusPage(icon_name="computer-symbolic", title="Select a device",
+                                                   description="Pick a device on the left to see its clock, "
+                                                               "channels and settings. You can also click a "
+                                                               "device name on the Routing tab."), "empty")
+        self.detail_stack.add_named(self.detail, "detail")
+        self.detail_page = Adw.NavigationPage(title="Device", child=self.detail_stack)
         split.set_sidebar(side_page)
         split.set_content(self.detail_page)
         self.stack.add_titled_with_icon(split, "devices", "Devices", "computer-symbolic")
@@ -603,8 +719,15 @@ class Window(Adw.ApplicationWindow):
         self.set_content(self.toasts)
 
         key = Gtk.ShortcutController()
-        key.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string("F5"),
-                                          Gtk.CallbackAction.new(lambda *_: self.refresh(rescan=True) or True)))
+
+        def shortcut(trigger, fn):
+            key.add_shortcut(Gtk.Shortcut.new(Gtk.ShortcutTrigger.parse_string(trigger),
+                                              Gtk.CallbackAction.new(lambda *_: (fn(), True)[1])))
+        shortcut("F5", lambda: self.refresh(rescan=True))
+        shortcut("<Primary>1", lambda: self.stack.set_visible_child_name("routing"))
+        shortcut("<Primary>2", lambda: self.stack.set_visible_child_name("devices"))
+        shortcut("<Primary>m", lambda: self.meter_btn.set_active(not self.meter_btn.get_active()))
+        shortcut("<Primary>f", self._focus_search)
         self.add_controller(key)
 
         GLib.timeout_add_seconds(POLL_SECONDS, self._tick)
@@ -615,6 +738,118 @@ class Window(Adw.ApplicationWindow):
         if cfg.get("meters"):
             self.meter_btn.set_active(True)
         self.connect_daemon()
+
+    # --- network interface ---
+    @staticmethod
+    def _usable_ifaces(settings):
+        return [i for i in (settings or {}).get("network_interfaces", []) if i.get("addresses")]
+
+    def _iface_text(self, settings):
+        names = (settings or {}).get("dante_interfaces") or []
+        return ", ".join(names) if names else "all interfaces"
+
+    def _startup_interface_check(self):
+        """On launch: if there is more than one usable interface and none has been chosen yet
+        (or the user asked to be asked every time), let them pick; otherwise re-apply the saved choice."""
+        if self._iface_checked:
+            return
+        self._iface_checked = True
+        client = self.client
+
+        def done(res, err):
+            if err or client is not self.client:
+                return
+            self.iface = res
+            self.sb_iface.set_label(f"Network: {self._iface_text(res)}")
+            choice = self.cfg.get("interface_choice")          # None = never chosen
+            if len(self._usable_ifaces(res)) > 1 and (choice is None or self.cfg.get("ask_every_launch")):
+                if not getattr(client, "demo", False):          # demo: only via the menu / status bar
+                    self._show_interface_dialog(res)
+            elif choice is not None and set(choice) != set(res.get("dante_interfaces") or []) \
+                    and not res.get("dante_interfaces_fixed"):
+                self._apply_interfaces(choice, quiet=True)
+        run_async(lambda: client.settings(), done)
+
+    def _choose_interface(self):
+        client = self.client
+
+        def done(res, err):
+            if err:
+                self.toast(f"Couldn't read network interfaces: {err}")
+                return
+            self.iface = res
+            self._show_interface_dialog(res)
+        run_async(lambda: client.settings(), done)
+
+    def _show_interface_dialog(self, settings):
+        ifaces = sorted(settings.get("network_interfaces", []), key=lambda i: (not i.get("running"), i["name"]))
+        current = set(settings.get("dante_interfaces") or self.cfg.get("interface_choice") or [])
+        if not current:
+            usable = [i for i in ifaces if i.get("addresses") and i.get("running")]
+            if len(usable) == 1:
+                current = {usable[0]["name"]}
+        body = ("Pick the network interface your Dante devices are connected to. Choose two for a redundant "
+                "(primary + secondary) network, or none to listen on every interface.")
+        if settings.get("dante_interfaces_fixed"):
+            body += "\n\nThe daemon was started with a fixed interface, so changes can’t be applied until it is restarted."
+        dlg = Adw.AlertDialog(heading="Choose your Dante network", body=body)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lb.add_css_class("boxed-list")
+        checks = {}
+        for i in ifaces:
+            addrs = ", ".join(i.get("addresses") or []) or "no IPv4 address"
+            sub = addrs + ("" if i.get("running") else " · link down")
+            row = Adw.ActionRow(title=i["name"], subtitle=sub)
+            chk = Gtk.CheckButton(valign=Gtk.Align.CENTER, active=i["name"] in current)
+            row.add_prefix(chk)
+            row.set_activatable_widget(chk)
+            if not i.get("addresses"):
+                row.add_css_class("dim-label")
+            lb.append(row)
+            checks[i["name"]] = chk
+        box.append(lb)
+        ask = Adw.SwitchRow(title="Ask every time I launch", active=bool(self.cfg.get("ask_every_launch")))
+        lb2 = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lb2.add_css_class("boxed-list")
+        lb2.append(ask)
+        box.append(lb2)
+        dlg.set_extra_child(box)
+        dlg.add_response("skip", "Not Now")
+        dlg.add_response("use", "Use Selection")
+        dlg.set_response_appearance("use", Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response("use")
+        dlg.set_close_response("skip")
+
+        def on_response(_d, resp):
+            self.cfg["ask_every_launch"] = ask.get_active()
+            if resp == "use":
+                self._apply_interfaces([n for n, c in checks.items() if c.get_active()])
+            else:
+                if self.cfg.get("interface_choice") is None:     # don't nag again next launch
+                    self.cfg["interface_choice"] = list(settings.get("dante_interfaces") or [])
+                save_config(self.cfg)
+        dlg.connect("response", on_response)
+        dlg.present(self)
+
+    def _apply_interfaces(self, names, quiet=False):
+        client = self.client
+
+        def done(res, err):
+            if err:
+                self.toast(f"Couldn’t change interface: {err}")
+                return
+            self.cfg["interface_choice"] = list(names)
+            save_config(self.cfg)
+            if isinstance(res, dict) and "network_interfaces" in res:
+                self.iface = res
+            else:
+                self.iface = dict(self.iface or {}, dante_interfaces=list(names))
+            self.sb_iface.set_label(f"Network: {self._iface_text(self.iface)}")
+            if not quiet:
+                self.toast(f"Using {', '.join(names) if names else 'all interfaces'} for Dante")
+            self.refresh(rescan=True)
+        run_async(lambda: client.set_interfaces(names), done)
 
     # --- metering ---
     def set_meters(self, on):
@@ -691,12 +926,15 @@ class Window(Adw.ApplicationWindow):
             sp.add_css_class("statusbar-sep")
             return sp
         self.sb_conn_dot, self.sb_conn = make_dot(), Gtk.Label(label="Connecting…", xalign=0)
+        self.sb_iface = Gtk.Button(label="Network: —", has_frame=False,
+                                   tooltip_text="Choose which network interface Dante uses")
+        self.sb_iface.connect("clicked", lambda _b: self._choose_interface())
         self.sb_devices = Gtk.Label(label="", xalign=0)
         self.sb_routes = Gtk.Label(label="", xalign=0)
         self.sb_clock_dot, self.sb_clock = make_dot(), Gtk.Label(label="Clock: —", xalign=0)
         self.sb_updated = Gtk.Label(label="", xalign=1, hexpand=True, halign=Gtk.Align.END)
         self.sb_updated.add_css_class("dim-label")
-        for w in (self.sb_conn_dot, self.sb_conn, sep(), self.sb_devices, sep(), self.sb_routes, sep(),
+        for w in (self.sb_conn_dot, self.sb_conn, sep(), self.sb_iface, sep(), self.sb_devices, sep(), self.sb_routes, sep(),
                   self.sb_clock_dot, self.sb_clock, self.sb_updated):
             bar.append(w)
         return bar
@@ -744,6 +982,8 @@ class Window(Adw.ApplicationWindow):
             return
         self._gen += 1                      # discard results from the previous backend
         self.busy = False
+        self._iface_checked, self.iface = False, None
+        self.sb_iface.set_label("Network: —")
         if self.meters_on:
             self._stop_metering()
         if on:
@@ -758,6 +998,7 @@ class Window(Adw.ApplicationWindow):
         self.routing.update({})
         self._update_device_list()
         self.detail.show_device(None)
+        self.detail_stack.set_visible_child_name("empty")
         self._apply_mode()
         self._set_banner(None)
         if self.meters_on:
@@ -784,6 +1025,7 @@ class Window(Adw.ApplicationWindow):
                 self._set_banner(None)
                 if started:
                     self.toast("Started netaudio daemon")
+                self._startup_interface_check()
                 self.refresh()
         run_async(lambda: ensure_daemon(self.client, self.cfg.get("port", DEFAULT_PORT),
                                         self.cfg.get("auto_start", True)), done)
@@ -862,6 +1104,11 @@ class Window(Adw.ApplicationWindow):
                 self.dev_list.append(row)
                 if d["server_name"] == self.selected:
                     self.dev_list.select_row(row)
+        if self.selected and self.selected not in self.devs:       # selected device left the network
+            self.selected = None
+            self._detail_snap = None
+            self.detail.show_device(None)
+            self.detail_stack.set_visible_child_name("empty")
         # Clock details change every poll: update the sidebar and detail rows in place.
         row = self.dev_list.get_first_child()
         while row is not None:
@@ -894,8 +1141,32 @@ class Window(Adw.ApplicationWindow):
         self._detail_snap = None
         d = self.devs.get(self.selected)
         self.detail.show_device(d)
+        self.detail_stack.set_visible_child_name("detail" if d else "empty")
         self.detail_page.set_title(d.get("name") or self.selected if d else "Device")
+        self.split.set_show_content(True)
+
+    def _open_device(self, server_name):
+        """Jump to a device's page on the Devices tab (e.g. from a name in the routing matrix)."""
+        self.dev_search.set_text("")
+        row = self.dev_list.get_first_child()
+        while row is not None:
+            if getattr(row, "server_name", None) == server_name:
+                self.dev_list.select_row(row)
+                if self.dev_list.get_selected_row() is row:
+                    self._dev_selected(self.dev_list, row)   # already selected: still refresh and reveal
+                break
+            row = row.get_next_sibling()
         self.stack.set_visible_child_name("devices")
+
+    def _dev_filter(self, row):
+        needle = self.dev_search.get_text().strip().lower()
+        if not needle:
+            return True
+        return needle in f"{row.get_title()} {row.get_subtitle() or ''}".lower()
+
+    def _focus_search(self):
+        self.stack.set_visible_child_name("devices")
+        self.dev_search.grab_focus()
 
     # --- actions ---
     def toast(self, msg):
@@ -936,9 +1207,17 @@ class PrefsDialog(Adw.PreferencesDialog):
         g.add(self.port)
         g.add(self.auto)
         page.add(g)
+        net = Adw.PreferencesGroup(title="Network",
+                                   description="Change the interface any time from the status bar or the ☰ menu.")
+        self.ask = Adw.SwitchRow(title="Ask which network interface on launch",
+                                 subtitle="Otherwise your last choice is remembered",
+                                 active=bool(cfg.get("ask_every_launch")))
+        net.add(self.ask)
+        page.add(net)
         self.add(page)
         self.connect("closed", lambda *_: on_save({"port": int(self.port.get_value()),
-                                                     "auto_start": self.auto.get_active()}))
+                                                     "auto_start": self.auto.get_active(),
+                                                     "ask_every_launch": self.ask.get_active()}))
 
 
 class App(Adw.Application):
@@ -964,6 +1243,9 @@ class App(Adw.Application):
             a = Gio.SimpleAction.new(name, None)
             a.connect("activate", cb)
             self.add_action(a)
+        ia = Gio.SimpleAction.new("interface", None)
+        ia.connect("activate", lambda *_: self.win and self.win._choose_interface())
+        self.add_action(ia)
         self.demo_action = Gio.SimpleAction.new_stateful("demo", None, GLib.Variant.new_boolean(DEMO))
         self.demo_action.connect("change-state", self._toggle_demo)
         self.add_action(self.demo_action)
@@ -993,6 +1275,7 @@ class App(Adw.Application):
             save_config(self.cfg)
             if changed and not getattr(self.win.client, "demo", False):
                 self.win.client = Client(port=self.cfg["port"])
+                self.win._iface_checked = False
                 self.win.connect_daemon()
         PrefsDialog(self.cfg, save).present(self.win)
 

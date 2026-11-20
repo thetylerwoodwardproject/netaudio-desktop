@@ -76,6 +76,14 @@ class Client:
     def identify(self, device):
         return self.post("/identify", {"device": device})
 
+    # --- network interface selection ---
+    def settings(self):
+        return self.get("/settings", timeout=5)
+
+    def set_interfaces(self, names):
+        """Choose which interfaces Dante uses. An empty list means all interfaces."""
+        return self.post("/settings/network", {"interfaces": list(names)}, timeout=15)
+
     # --- metering (levels arrive on the /events stream; see meters.py) ---
     def make_meter_feed(self):
         from .meters import MeterFeed

@@ -39,6 +39,7 @@ class DemoClient:
                  ["Play L", "Play R"], ["Rec L", "Rec R"]),
         ):
             self.d[dev["server_name"]] = dev
+        self._ifaces = []
         self.preferred = "Stagebox-A"
         self._eui = {d["name"]: "00:1d:c1:ff:fe:" + d["mac_address"].lower()[-8:] for d in self.d.values()}
         self._rng = random.Random(7)
@@ -115,6 +116,22 @@ class DemoClient:
     def devices(self):
         self._tick_clock()
         return copy.deepcopy(self.d)
+
+    _NICS = [{"name": "enp3s0", "addresses": ["192.168.10.5"], "running": True},
+             {"name": "enp4s0", "addresses": ["192.168.20.5"], "running": True},
+             {"name": "wlp2s0", "addresses": [], "running": False}]
+
+    def settings(self):
+        return {"network_interfaces": copy.deepcopy(self._NICS), "dante_interfaces": list(self._ifaces),
+                "dante_interfaces_fixed": False, "monitoring_port": 8752, "active_monitoring_port": 8752}
+
+    def set_interfaces(self, names):
+        known = {n["name"] for n in self._NICS}
+        bad = [n for n in names if n not in known]
+        if bad:
+            raise ApiError(f"Unknown interface: {', '.join(bad)}")
+        self._ifaces = list(names)
+        return self.settings()
 
     def make_meter_feed(self):
         from .meters import DemoFeed
