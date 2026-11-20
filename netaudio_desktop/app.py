@@ -23,7 +23,7 @@ SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000]
 
 CSS = b"""
 .cell { min-width: 22px; min-height: 22px; padding: 0; margin: 1px; border-radius: 4px; }
-.cell:checked { background: @accent_bg_color; color: @accent_fg_color; }
+.cell:checked, .cell:checked:backdrop { background: #3584e4; color: #ffffff; }
 .cell-pending { opacity: 0.5; }
 .dev-head { font-weight: bold; padding: 2px 6px; background: alpha(@accent_bg_color, 0.15); border-radius: 4px; }
 .ch-head { font-size: smaller; opacity: 0.8; }
