@@ -1,7 +1,9 @@
 """In-memory fake of the daemon client, for trying the UI without a Dante network."""
 import copy
+import hashlib
 import random
 import time
+import xml.etree.ElementTree as ET
 
 from .api import ApiError
 
@@ -108,6 +110,136 @@ class DemoClient:
                 cs["synchronization"], cs["servo_state"] = "synchronizing", "acquiring"
                 if self._rng.random() < 0.3:
                     cs["synchronization"], cs["servo_state"] = "synchronized", "locked"
+
+    # --- presets (simulated: a small XML dialect, applied to the in-memory devices) ---
+    def capture_preset(self, devices, name, sections):
+        root = ET.Element("preset", {"name": name, "format": "netaudio-demo-1"})
+        omitted = []
+        for sn in devices:
+            d = self._find(sn)
+            de = ET.SubElement(root, "device", {"name": d["name"]})
+            if "audio" in sections:
+                ET.SubElement(de, "audio", {"sample_rate": str(d["sample_rate_hz"])})
+            if "routing" in sections:
+                for key, kind in (("transmitters", "tx"), ("receivers", "rx")):
+                    for n, c in d["channels"][key].items():
+                        ET.SubElement(de, "label", {"kind": kind, "n": n, "value": self._label(c)})
+                for sub in d["subscriptions"]:
+                    ET.SubElement(de, "subscription", {"rx": str(sub["rx_channel_number"]),
+                                                       "tx_device": sub["tx_device"], "tx_channel": sub["tx_channel"]})
+            if "network" in sections:
+                ET.SubElement(de, "network", {"ipv4": d["ipv4"]})
+            if "device_controls" in sections and d["name"] == "Amp-Rack":
+                omitted.append({"device": d["name"], "setting": "Analog output gain",
+                                "reason": "This device doesn't expose its gain controls (demo)"})
+        return {"device_count": len(devices), "filename": f"{name}.xml", "name": name, "omitted": omitted,
+                "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"), "xml": ET.tostring(root, encoding="unicode")}
+
+    @staticmethod
+    def _parse_preset(xml):
+        try:
+            return ET.fromstring(xml)
+        except ET.ParseError as e:
+            raise ApiError(f"Not a valid preset: {e}") from None
+
+    def preview_preset(self, xml, devices):
+        root = self._parse_preset(xml)
+        out = []
+        for de in root.findall("device"):
+            subs = de.findall("subscription")
+            labels = de.findall("label")
+            audio = de.find("audio")
+            settings = []
+            if audio is not None:
+                settings.append({"label": "Sample rate", "value": f"{audio.get('sample_rate')} Hz"})
+            if labels:
+                settings.append({"label": "Channel names", "value": f"{len(labels)} channels"})
+            if subs or labels:
+                settings.append({"label": "Subscriptions", "value": f"{len(subs)} routes"})
+            targets = [{"id": d["server_name"], "name": d["name"], "address": d["ipv4"], "online": True,
+                        "context": None} for d in self.d.values() if d["name"] == de.get("name")]
+            out.append({"name": de.get("name"), "preserved": [], "settings": settings, "targets": targets})
+        return {"devices": out, "digest": hashlib.sha256(xml.encode()).hexdigest(), "name": root.get("name")}
+
+    def _preset_actions(self, de, target):
+        """Compute (action dict, apply callable) pairs for one preset device against its target device."""
+        acts = []
+        audio = de.find("audio")
+        if audio is not None:
+            want = int(audio.get("sample_rate"))
+            cur = target["sample_rate_hz"]
+            acts.append(({"kind": "sample_rate", "state": "change" if want != cur else "unchanged",
+                          "reason": f"{cur} Hz → {want} Hz" if want != cur else "Already set",
+                          "current": cur, "requested": want},
+                         (lambda w=want, t=target: self.set_sample_rate(t["server_name"], w))))
+        for kind, key, nice in (("tx", "transmitters", "transmitter_channel_names"),
+                                ("rx", "receivers", "receiver_channel_names")):
+            diffs = [(le.get("n"), le.get("value")) for le in de.findall("label") if le.get("kind") == kind
+                     and le.get("n") in target["channels"][key]
+                     and self._label(target["channels"][key][le.get("n")]) != le.get("value")]
+            if any(le.get("kind") == kind for le in de.findall("label")):
+                acts.append(({"kind": nice, "state": "change" if diffs else "unchanged",
+                              "reason": f"{len(diffs)} name(s) differ" if diffs else "Already set",
+                              "current": None, "requested": None,
+                              "details": [f"{kind.upper()} {n}: {self._label(target['channels'][key][n])} → {v}"
+                                          for n, v in diffs]},
+                             (lambda dd=diffs, k=kind, t=target: [
+                                 self.rename_channel(t["server_name"], k, int(n), v) for n, v in dd])))
+        subs = de.findall("subscription")
+        if subs or any(le.get("kind") for le in de.findall("label")):
+            want = {int(s.get("rx")): (s.get("tx_device"), s.get("tx_channel")) for s in subs}
+            cur = {s["rx_channel_number"]: (s["tx_device"], s["tx_channel"]) for s in target["subscriptions"]}
+            changes = []
+            for rx in sorted(set(want) | set(cur)):
+                if want.get(rx) != cur.get(rx):
+                    fmt = lambda v: f"{v[0]} / {v[1]}" if v else "(none)"  # noqa: E731
+                    changes.append((rx, want.get(rx), f"Rx {rx}: {fmt(cur.get(rx))} → {fmt(want.get(rx))}"))
+            acts.append(({"kind": "receiver_subscriptions", "state": "change" if changes else "unchanged",
+                          "reason": f"{len(changes)} route(s) differ" if changes else "Already set",
+                          "current": len(cur), "requested": len(want), "details": [c[2] for c in changes]},
+                         (lambda ch=changes, t=target: [
+                             self.subscribe(t["server_name"], rx, w[0], w[1]) if w
+                             else self.unsubscribe(t["server_name"], rx) for rx, w, _ in ch])))
+        if de.find("network") is not None:
+            acts.append(({"kind": "interface", "state": "unsupported",
+                          "reason": "Network settings aren't restored in demo mode", "current": None,
+                          "requested": None}, None))
+        return acts
+
+    def plan_preset(self, xml, targets, excluded, store=False):
+        root = self._parse_preset(xml)
+        devs = []
+        for de in root.findall("device"):
+            name = de.get("name")
+            if name in excluded or name not in targets:
+                continue
+            target = self._find(targets[name])
+            devs.append({"device_name": name, "server_name": target["server_name"],
+                         "actions": [a for a, _f in self._preset_actions(de, target)]})
+        return {"devices": devs, "digest": hashlib.sha256(xml.encode()).hexdigest(), "name": root.get("name")}
+
+    def load_preset(self, xml, digest, targets, excluded, store=False):
+        if digest != hashlib.sha256(xml.encode()).hexdigest():
+            raise ApiError("Preset changed since it was planned; plan again before applying")
+        root = self._parse_preset(xml)
+        ops = []
+        time.sleep(0.6)
+        # Names first, then audio settings, then subscriptions (as the real daemon orders them).
+        order = {"transmitter_channel_names": 0, "receiver_channel_names": 0, "sample_rate": 1,
+                 "receiver_subscriptions": 2}
+        for de in root.findall("device"):
+            name = de.get("name")
+            if name in excluded or name not in targets:
+                continue
+            target = self._find(targets[name])
+            for act, fn in sorted(self._preset_actions(de, target), key=lambda p: order.get(p[0]["kind"], 3)):
+                if act["state"] == "change" and fn:
+                    fn()
+                    ops.append({"device_name": name, "kind": act["kind"], "state": "applied",
+                                "message": act["reason"]})
+        return {"complete": True, "digest": digest, "interrupted": False, "name": root.get("name"),
+                "run_id": f"demo-{int(time.time())}",
+                "report": {"failures": 0, "needs_reboot": [], "operations": ops, "results": [], "unverified": 0}}
 
     # --- client API ---
     def server_info(self):

@@ -76,6 +76,26 @@ class Client:
     def identify(self, device):
         return self.post("/identify", {"device": device})
 
+    # --- presets (save / preview / plan / restore device configuration) ---
+    def capture_preset(self, devices, name, sections):
+        """Read the selected devices and return {xml, filename, name, omitted, ...}. Does not write anything."""
+        return self.post("/presets/save", {"devices": list(devices), "name": name, "sections": list(sections)},
+                         timeout=90)
+
+    def preview_preset(self, xml, devices):
+        return self.post("/presets/preview", {"xml": xml, "devices": list(devices)}, timeout=20)
+
+    def plan_preset(self, xml, targets, excluded, store=False):
+        """Read-only: what would change if this preset were loaded onto `targets`."""
+        return self.post("/presets/plan", {"xml": xml, "targets": targets, "excluded": list(excluded),
+                                           "store_current_configuration": bool(store)}, timeout=90)
+
+    def load_preset(self, xml, digest, targets, excluded, store=False):
+        """Apply a preset. `digest` must be the plan's digest; this CHANGES live device settings."""
+        return self.post("/presets/load", {"xml": xml, "digest": digest, "confirmed": True,
+                                           "targets": targets, "excluded": list(excluded),
+                                           "store_current_configuration": bool(store)}, timeout=300)
+
     # --- network interface selection ---
     def settings(self):
         return self.get("/settings", timeout=5)

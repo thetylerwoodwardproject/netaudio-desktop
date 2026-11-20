@@ -30,6 +30,7 @@ Discover devices, patch channels in a routing matrix, and keep an eye on clock s
 | 🔀 **Routing matrix** | Receivers as rows, transmitters as columns, with channel names on both axes (transmit names read vertically above each column). Click a cell to subscribe, click again to clear. One source per receive channel, kept in sync with the network every few seconds. |
 | ✏️ **Rename in place** | Click a receive channel name (row) or a transmit channel number (column header) to rename it right from the matrix. |
 | 🎚️ **Live meters** | Press the speaker button in the header to show level bars on every channel in the matrix and on device pages. Channel names turn green when **audio is present**; bars go amber when hot and red on clipping. Opt-in, since it asks devices to stream meter data. |
+| 💾 **Presets** | Save the current routing, channel names, audio settings and device controls as a preset, and restore it later. Restoring **always shows a plan first** — every setting that will change, already matches, or can't be applied — and nothing is written until you confirm. Presets are plain XML files you can export, import and share. |
 | 🌐 **Pick your Dante network** | On first launch (when you have more than one network interface) the app asks which one your Dante devices are on — or two, for a redundant network. Change it any time from the status bar or the ☰ menu. |
 | 🔗 **Click through** | Click a device name in the routing matrix to jump straight to its page; a hover crosshair shows exactly which row and column you're about to patch. |
 | 🕒 **Clock & sync** | See each device’s clock role, sync state, frequency offset, drift, **who the grandmaster is** and who each device syncs to, plus per-port status. Toggle **Preferred leader** from the app. |
@@ -39,6 +40,8 @@ Discover devices, patch channels in a routing matrix, and keep an eye on clock s
 | 🚀 **Zero setup** | Starts the NetAudio daemon for you if it isn’t already running. |
 
 <div align="center">
+<img src="docs/screenshots/presets.png" width="560" alt="Restoring a preset: review the plan before anything changes">
+<br><br>
 <img src="docs/screenshots/devices.png" width="560" alt="Device details with clock and sync information">
 </div>
 
@@ -101,9 +104,10 @@ netaudio-desktop --demo
 - **Rename channels** — click a channel label in the matrix, or edit it on the **Devices** page.
 - **Devices** — pick a device on the left for details, clock & sync, and settings.
 - **Meters** — the 🔊 button in the header turns live levels and signal-presence on or off (remembered between runs). Hover a channel for its exact dBFS.
+- **Presets** — on the **Presets** tab choose **Save Current Setup…**, pick the devices and what to include, and name it. **Restore…** maps the preset's devices onto devices on your network (handy when hardware changed), shows the plan, and asks you to confirm before applying. Files live in `~/.local/share/netaudio-desktop/presets/`.
 - **Network interface** — shown in the status bar (`Network: enp3s0`); click it, or use ☰ → *Network interface…*, to switch. Turn on *Ask every time I launch* if you move between networks.
 - **Open a device** — click its name in the matrix; **Show in Routing** on the device page takes you back. Use the search box to filter long device lists.
-- **Keyboard** — `Ctrl+1` Routing · `Ctrl+2` Devices · `Ctrl+F` search · `Ctrl+M` meters · `F5` rescan.
+- **Keyboard** — `Ctrl+1` Routing · `Ctrl+2` Devices · `Ctrl+3` Presets · `Ctrl+F` search · `Ctrl+M` meters · `F5` rescan.
 - **Rescan** — `F5` or the ↻ button.
 - **Preferences** — daemon port (default `4780`) and auto-start, in the ☰ menu.
 
@@ -117,7 +121,7 @@ netaudio-desktop --demo
 ```
 
 The app talks only to the daemon’s documented local HTTP API (`/devices`, `/subscribe`,
-`/rename-channel`, `/set-preferred-leader`, `/metering/*`, …), reads live meter values from its
+`/rename-channel`, `/set-preferred-leader`, `/metering/*`, `/presets/*`, …), reads live meter values from its
 `/events` stream,, uses just the Python standard library for
 networking, and keeps the UI responsive by doing all requests off the main thread.
 

@@ -15,6 +15,9 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk, Pango  # 
 from . import __version__  # noqa: E402
 from . import clock as clk  # noqa: E402
 from . import meters as mtr  # noqa: E402
+from . import presets as presets_mod  # noqa: E402
+from .presets_ui import PresetsView, RestoreDialog, SaveDialog  # noqa: E402
+from .util import run_async  # noqa: E402
 from .api import DEFAULT_PORT, ApiError, Client, ensure_daemon  # noqa: E402
 
 APP_ID = "app.netaudio.Desktop"
@@ -127,19 +130,6 @@ def apply_meter(bar, dbfs, state):
         for c in ("m-ok", "m-hot", "m-clip"):
             bar.remove_css_class(c)
         bar.add_css_class(cls)
-
-
-def run_async(fn, done):
-    """Run fn() in a thread; call done(result, error) on the GTK main loop."""
-    def work():
-        try:
-            res, err = fn(), None
-        except ApiError as e:
-            res, err = None, str(e)
-        except Exception as e:  # noqa: BLE001
-            res, err = None, f"{type(e).__name__}: {e}"
-        GLib.idle_add(lambda: done(res, err) and False)
-    threading.Thread(target=work, daemon=True).start()
 
 
 class VerticalLabel(Gtk.Widget):
@@ -705,6 +695,11 @@ class Window(Adw.ApplicationWindow):
         split.set_content(self.detail_page)
         self.stack.add_titled_with_icon(split, "devices", "Devices", "computer-symbolic")
 
+        self._real_store = presets_mod.PresetStore(Path(GLib.get_user_data_dir()) / "netaudio-desktop" / "presets")
+        self.preset_store = self._real_store
+        self.presets = PresetsView(self)
+        self.stack.add_titled_with_icon(self.presets, "presets", "Presets", "document-save-symbolic")
+
         self.demo_banner = Adw.Banner(title="Demo mode — simulated devices, nothing is sent to your network",
                                       button_label="Exit Demo", action_name="app.demo")
         self.status = Adw.Banner(revealed=False)
@@ -726,6 +721,7 @@ class Window(Adw.ApplicationWindow):
         shortcut("F5", lambda: self.refresh(rescan=True))
         shortcut("<Primary>1", lambda: self.stack.set_visible_child_name("routing"))
         shortcut("<Primary>2", lambda: self.stack.set_visible_child_name("devices"))
+        shortcut("<Primary>3", lambda: self.stack.set_visible_child_name("presets"))
         shortcut("<Primary>m", lambda: self.meter_btn.set_active(not self.meter_btn.get_active()))
         shortcut("<Primary>f", self._focus_search)
         self.add_controller(key)
@@ -738,6 +734,26 @@ class Window(Adw.ApplicationWindow):
         if cfg.get("meters"):
             self.meter_btn.set_active(True)
         self.connect_daemon()
+
+    # --- presets ---
+    def _seed_demo_presets(self):
+        names = [d["server_name"] for d in self.client.d.values()]
+        cap = self.client.capture_preset(names, "Default routing", ["routing", "audio"])
+        self.preset_store.save("Default routing", cap["xml"], {
+            "devices": [d["name"] for d in self.client.d.values()], "sections": ["routing", "audio"],
+            "device_count": cap["device_count"], "omitted": [], "saved_at": cap["saved_at"][:19]})
+
+    def presets_save(self):
+        if not any(d.get("online", True) for d in self.devs.values()):
+            self.toast("No devices found yet — connect to a Dante network or try Demo mode")
+            return
+        SaveDialog(self)
+
+    def presets_restore(self, meta):
+        if not self.devs:
+            self.toast("No devices found yet")
+            return
+        RestoreDialog(self, meta)
 
     # --- network interface ---
     @staticmethod
@@ -1007,6 +1023,12 @@ class Window(Adw.ApplicationWindow):
 
     def _apply_mode(self):
         demo = getattr(self.client, "demo", False)
+        if demo:
+            self.preset_store = presets_mod.PresetStore(None)        # simulated: never touches your real presets
+            self._seed_demo_presets()
+        else:
+            self.preset_store = self._real_store
+        self.presets.reload()
         self.demo_banner.set_revealed(demo)
         self.set_title("NetAudio — Demo" if demo else "NetAudio")
 
