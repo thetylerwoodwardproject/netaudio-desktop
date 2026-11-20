@@ -45,6 +45,8 @@ levelbar.meter.m-hot block.filled.high, levelbar.meter.m-hot block.filled.full {
 levelbar.meter.m-clip block.filled, levelbar.meter.m-clip block.filled.low,
 levelbar.meter.m-clip block.filled.high, levelbar.meter.m-clip block.filled.full { background: #e01b24; }
 .sig { color: #57e389; }
+.axis-title { font-weight: bold; font-size: smaller; letter-spacing: 1px; opacity: 0.75;
+              padding: 0 6px 4px 0; }
 .rx-dev { font-weight: bold; padding: 6px 8px 2px 0; }
 """
 
@@ -193,7 +195,7 @@ class RoutingView(Gtk.ScrolledWindow):
                              width_chars=1, max_width_chars=1)
             head.set_tooltip_text(dev.get("name") or dev["server_name"])
             head.add_css_class("dev-head")
-            self.grid.attach(head, i + 1, 0, j - i, 1)
+            self.grid.attach(head, i + 1, 1, j - i, 1)
             i = j
         for ci, (d, n, ch) in enumerate(tx_cols):
             lbl = Gtk.Label(label=str(n))
@@ -205,9 +207,18 @@ class RoutingView(Gtk.ScrolledWindow):
             colbox.append(bar)
             colbox.append(lbl)
             self.meters[("tx", d["server_name"], n)] = [bar, lbl, lbl.get_tooltip_text()]
-            self.grid.attach(colbox, ci + 1, 1, 1, 1)
+            self.grid.attach(colbox, ci + 1, 2, 1, 1)
+        # Axis titles: columns are transmitters (sources), rows are receivers (destinations).
+        tx_title = Gtk.Label(label="TRANSMIT  →", xalign=0, hexpand=False)
+        tx_title.add_css_class("axis-title")
+        tx_title.set_tooltip_text("Columns: transmitters. Audio comes from these channels.")
+        self.grid.attach(tx_title, 1, 0, len(tx_cols), 1)
+        rx_title = Gtk.Label(label="RECEIVE  ↓", xalign=0, valign=Gtk.Align.END)
+        rx_title.add_css_class("axis-title")
+        rx_title.set_tooltip_text("Rows: receivers. Audio goes to these channels; click a cell to patch a source.")
+        self.grid.attach(rx_title, 0, 1, 1, 2)
         # Rows
-        row = 2
+        row = 3
         last_dev = None
         for d, n, rch in rx_rows:
             if d is not last_dev:
