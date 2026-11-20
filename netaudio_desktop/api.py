@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_PORT = 4780
+CLIENT_ID = f"netaudio-desktop-{os.getpid()}"
 
 
 class ApiError(Exception):
@@ -74,6 +75,17 @@ class Client:
 
     def identify(self, device):
         return self.post("/identify", {"device": device})
+
+    # --- metering (levels arrive on the /events stream; see meters.py) ---
+    def make_meter_feed(self):
+        from .meters import MeterFeed
+        return MeterFeed(self.base)
+
+    def start_metering(self, device):
+        return self.post("/metering/start", {"client_id": CLIENT_ID, "device": device}, timeout=10)
+
+    def stop_metering(self, device):
+        return self.post("/metering/stop", {"client_id": CLIENT_ID, "device": device}, timeout=3)
 
     def refresh_clock(self, device):
         return self.post("/refresh-clock", {"device": device}, timeout=20)

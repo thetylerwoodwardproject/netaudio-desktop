@@ -29,6 +29,7 @@ Discover devices, patch channels in a routing matrix, and keep an eye on clock s
 |---|---|
 | 🔀 **Routing matrix** | Receivers as rows, transmitters as columns. Click a cell to subscribe, click again to clear. One source per receive channel, kept in sync with the network every few seconds. |
 | ✏️ **Rename in place** | Click a receive channel name (row) or a transmit channel number (column header) to rename it right from the matrix. |
+| 🎚️ **Live meters** | Press the speaker button in the header to show level bars on every channel in the matrix and on device pages. Channel names turn green when **audio is present**; bars go amber when hot and red on clipping. Opt-in, since it asks devices to stream meter data. |
 | 🕒 **Clock & sync** | See each device’s clock role, sync state, frequency offset, drift, **who the grandmaster is** and who each device syncs to, plus per-port status. Toggle **Preferred leader** from the app. |
 | 📟 **Device details** | IP/MAC, sample rate, encoding, latency, channel counts. Rename devices, change sample rate, or flash a device’s identify light. |
 | 📊 **Status bar** | Daemon connection, devices online, route count and overall clock health (`grandmaster Stagebox-A · 5/5 in sync`) at a glance. |
@@ -97,6 +98,7 @@ netaudio-desktop --demo
 - **Routing** — click a cell to patch, click a lit cell to unpatch. Hover headers for full channel names.
 - **Rename channels** — click a channel label in the matrix, or edit it on the **Devices** page.
 - **Devices** — pick a device on the left for details, clock & sync, and settings.
+- **Meters** — the 🔊 button in the header turns live levels and signal-presence on or off (remembered between runs). Hover a channel for its exact dBFS.
 - **Rescan** — `F5` or the ↻ button.
 - **Preferences** — daemon port (default `4780`) and auto-start, in the ☰ menu.
 
@@ -110,7 +112,8 @@ netaudio-desktop --demo
 ```
 
 The app talks only to the daemon’s documented local HTTP API (`/devices`, `/subscribe`,
-`/rename-channel`, `/set-preferred-leader`, …), uses just the Python standard library for
+`/rename-channel`, `/set-preferred-leader`, `/metering/*`, …), reads live meter values from its
+`/events` stream,, uses just the Python standard library for
 networking, and keeps the UI responsive by doing all requests off the main thread.
 
 ## 🛠️ Building packages

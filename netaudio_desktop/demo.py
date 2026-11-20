@@ -116,6 +116,16 @@ class DemoClient:
         self._tick_clock()
         return copy.deepcopy(self.d)
 
+    def make_meter_feed(self):
+        from .meters import DemoFeed
+        return DemoFeed(self)
+
+    def start_metering(self, device):
+        return {"success": True}
+
+    def stop_metering(self, device):
+        return {"success": True}
+
     def refresh_clock(self, device):
         self._find(device)
         return {"success": True}

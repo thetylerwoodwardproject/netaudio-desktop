@@ -14,6 +14,7 @@ from gi.repository import Adw, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from . import __version__  # noqa: E402
 from . import clock as clk  # noqa: E402
+from . import meters as mtr  # noqa: E402
 from .api import DEFAULT_PORT, ApiError, Client, ensure_daemon  # noqa: E402
 
 APP_ID = "app.netaudio.Desktop"
@@ -36,6 +37,14 @@ CSS = b"""
 .dot-unknown { opacity: 0.35; }
 .statusbar { padding: 4px 12px; font-size: smaller; }
 .statusbar-sep { opacity: 0.3; }
+levelbar.meter trough { background: alpha(currentColor, 0.14); border-radius: 3px; min-height: 5px; min-width: 5px; }
+levelbar.meter block.filled, levelbar.meter block.filled.low, levelbar.meter block.filled.high,
+levelbar.meter block.filled.full { border-radius: 3px; min-height: 4px; min-width: 4px; background: #57e389; }
+levelbar.meter.m-hot block.filled, levelbar.meter.m-hot block.filled.low,
+levelbar.meter.m-hot block.filled.high, levelbar.meter.m-hot block.filled.full { background: #f5c211; }
+levelbar.meter.m-clip block.filled, levelbar.meter.m-clip block.filled.low,
+levelbar.meter.m-clip block.filled.high, levelbar.meter.m-clip block.filled.full { background: #e01b24; }
+.sig { color: #57e389; }
 .rx-dev { font-weight: bold; padding: 6px 8px 2px 0; }
 """
 
@@ -87,6 +96,31 @@ def set_dot(dot, level):
     dot.add_css_class(f"dot-{level if level in LEVELS else 'unknown'}")
 
 
+def make_meter(vertical=False, visible=False):
+    bar = Gtk.LevelBar(orientation=Gtk.Orientation.VERTICAL if vertical else Gtk.Orientation.HORIZONTAL,
+                       min_value=0, max_value=1, value=0, valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
+    for off in ("low", "high", "full"):
+        bar.remove_offset_value(off)
+    if vertical:
+        bar.set_inverted(True)      # fill from the bottom up
+    bar.add_css_class("meter")
+    bar.add_css_class("m-ok")
+    bar.set_size_request(7, 30) if vertical else bar.set_size_request(48, 6)
+    bar.set_visible(visible)
+    return bar
+
+
+def apply_meter(bar, dbfs, state):
+    lvl = round(mtr.level01(dbfs, state), 2)
+    cls = mtr.css_class(dbfs, state) if lvl > 0 else "m-ok"
+    if getattr(bar, "_m", None) != (lvl, cls):
+        bar._m = (lvl, cls)
+        bar.set_value(lvl)
+        for c in ("m-ok", "m-hot", "m-clip"):
+            bar.remove_css_class(c)
+        bar.add_css_class(cls)
+
+
 def run_async(fn, done):
     """Run fn() in a thread; call done(result, error) on the GTK main loop."""
     def work():
@@ -110,6 +144,8 @@ class RoutingView(Gtk.ScrolledWindow):
         self.grid = Gtk.Grid(margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         self.set_child(self.grid)
         self.signature = None
+        self.meters_on = False
+        self.meters = {}         # (kind, server_name, num) -> [bar, label, base_tooltip]
         self.cells = {}          # (rx_server, rx_num, tx_name, tx_label) -> ToggleButton
         self._updating = False
         self.empty = Adw.StatusPage(icon_name="network-wired-symbolic", title="No Dante devices found",
@@ -141,6 +177,7 @@ class RoutingView(Gtk.ScrolledWindow):
         while (c := self.grid.get_first_child()) is not None:
             self.grid.remove(c)
         self.cells.clear()
+        self.meters.clear()
         if not tx_cols or not rx_rows:
             self.set_child(self.empty)
             return
@@ -163,7 +200,12 @@ class RoutingView(Gtk.ScrolledWindow):
             lbl.add_css_class("ch-head")
             lbl.set_tooltip_text(f"{d.get('name') or d['server_name']} — {ch_label(ch, n)}\nClick to rename")
             self._renamable(lbl, "tx", d, n, ch)
-            self.grid.attach(lbl, ci + 1, 1, 1, 1)
+            bar = make_meter(vertical=True, visible=self.meters_on)
+            colbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER)
+            colbox.append(bar)
+            colbox.append(lbl)
+            self.meters[("tx", d["server_name"], n)] = [bar, lbl, lbl.get_tooltip_text()]
+            self.grid.attach(colbox, ci + 1, 1, 1, 1)
         # Rows
         row = 2
         last_dev = None
@@ -178,7 +220,15 @@ class RoutingView(Gtk.ScrolledWindow):
             rl.add_css_class("rx-label")
             rl.set_tooltip_text("Click to rename")
             self._renamable(rl, "rx", d, n, rch)
-            self.grid.attach(rl, 0, row, 1, 1)
+            rl.set_width_chars(18)          # fixed width so the bars line up in a column
+            rl.set_max_width_chars(18)
+            rl.set_ellipsize(3)
+            rbar = make_meter(vertical=False, visible=self.meters_on)
+            rowbox = Gtk.Box(spacing=6)
+            rowbox.append(rl)
+            rowbox.append(rbar)
+            self.meters[("rx", d["server_name"], n)] = [rbar, rl, rl.get_tooltip_text()]
+            self.grid.attach(rowbox, 0, row, 1, 1)
             for ci, (td, tn, tch) in enumerate(tx_cols):
                 b = Gtk.ToggleButton()
                 b.add_css_class("cell")
@@ -221,6 +271,31 @@ class RoutingView(Gtk.ScrolledWindow):
         pop.popup()
         entry.grab_focus()
         entry.select_region(0, -1)
+
+    def set_meters_visible(self, on):
+        self.meters_on = on
+        if not on:
+            self.update_meters({})
+        for bar, _l, _t in self.meters.values():
+            bar.set_visible(on)
+
+    def update_meters(self, data):
+        for (kind, sn, n), ent in self.meters.items():
+            bar, lbl, base = ent
+            d = data.get(sn)
+            if d:
+                dbfs, state = d[kind].get(n, (None, "unknown"))
+                present = d[kind + "_present"].get(n, False)
+            else:
+                dbfs, state, present = None, "unknown", False
+            apply_meter(bar, dbfs, state)
+            if getattr(lbl, "_sig", False) != present:
+                lbl._sig = present
+                (lbl.add_css_class if present else lbl.remove_css_class)("sig")
+            tip = f"{base}\n{mtr.describe(dbfs, state, present)}" if d and self.meters_on else base
+            if getattr(bar, "_tip", None) != tip:
+                bar._tip = tip
+                lbl.set_tooltip_text(tip)
 
     def _sync_state(self, devices):
         by_name = {}
@@ -276,6 +351,7 @@ class DeviceDetail(Adw.PreferencesPage):
             self.remove(g)
         self._groups = []
         self._clock_rows = {}
+        self._meter_bars = {}
         if d is None:
             return
         name = d.get("name") or d["server_name"]
@@ -323,6 +399,10 @@ class DeviceDetail(Adw.PreferencesPage):
             for n, ch in chans:
                 row = Adw.EntryRow(title=f"Channel {n}", text=ch_label(ch, n), show_apply_button=True)
                 row.set_sensitive(ch.get("can_rename") is not False)
+                mbar = make_meter(vertical=False, visible=self.win.meters_on)
+                mbar.set_size_request(70, 6)
+                row.add_suffix(mbar)
+                self._meter_bars[(kind, n)] = mbar
                 row.connect("apply", lambda rw, kind=kind, n=n: self.win.do(
                     lambda c: c.rename_channel(d["server_name"], kind, n, rw.get_text()),
                     f"Channel {n} renamed"))
@@ -417,6 +497,22 @@ class DeviceDetail(Adw.PreferencesPage):
         avail = (d.get("clock_control_availability") or {}).get("preferred_leader", False)
         pl.set_sensitive(bool(avail) and not cs.get("preferred_leader_locked"))
 
+    def set_meters_visible(self, on):
+        for bar in getattr(self, "_meter_bars", {}).values():
+            bar.set_visible(on)
+            if not on:
+                apply_meter(bar, None, "unknown")
+
+    def update_meters(self, d, data):
+        ent = data.get(d["server_name"]) if d else None
+        for (kind, n), bar in getattr(self, "_meter_bars", {}).items():
+            if ent:
+                dbfs, state = ent[kind].get(n, (None, "unknown"))
+            else:
+                dbfs, state = None, "unknown"
+            apply_meter(bar, dbfs, state)
+            bar.set_tooltip_text(mtr.describe(dbfs, state, ent["%s_present" % kind].get(n, False)) if ent else None)
+
     def _pl_toggled(self, row, _p, server_name):
         if self._pl_updating:
             return
@@ -439,6 +535,9 @@ class Window(Adw.ApplicationWindow):
         super().__init__(application=app, title="NetAudio", default_width=1200, default_height=760)
         self.client, self.cfg = client, cfg
         self._gen = 0
+        self.meters_on = False
+        self.feed = None
+        self._metered = set()
         self.clock_summary = {"per": {}, "grandmaster": None, "synced": 0, "total": 0}
         self.devs = {}
         self.busy = False
@@ -453,6 +552,9 @@ class Window(Adw.ApplicationWindow):
         refresh = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Rescan devices (F5)")
         refresh.connect("clicked", lambda _b: self.refresh(rescan=True))
         header.pack_start(refresh)
+        self.meter_btn = Gtk.ToggleButton(icon_name="audio-volume-high-symbolic",
+                                          tooltip_text="Show live audio meters and signal presence")
+        header.pack_start(self.meter_btn)
         self.spinner = Gtk.Spinner()
         header.pack_start(self.spinner)
         menu = Gio.Menu()
@@ -495,8 +597,77 @@ class Window(Adw.ApplicationWindow):
         self.add_controller(key)
 
         GLib.timeout_add_seconds(POLL_SECONDS, self._tick)
+        GLib.timeout_add(100, self._meter_tick)
+        self.connect("close-request", self._on_close)
         self._apply_mode()
+        self.meter_btn.connect("toggled", lambda b: self.set_meters(b.get_active()))
+        if cfg.get("meters"):
+            self.meter_btn.set_active(True)
         self.connect_daemon()
+
+    # --- metering ---
+    def set_meters(self, on):
+        if on == self.meters_on:
+            return
+        self.meters_on = on
+        self.cfg["meters"] = on
+        save_config(self.cfg)
+        self.routing.set_meters_visible(on)
+        self.detail.set_meters_visible(on)
+        if on:
+            self._start_metering()
+        else:
+            self._stop_metering()
+
+    def _start_metering(self):
+        self.feed = self.client.make_meter_feed()
+        self.feed.start()
+        self._sync_metering()
+
+    def _sync_metering(self):
+        """Ask every online device to stream meters (idempotent)."""
+        if not self.meters_on:
+            return
+        for d in self.devs.values():
+            sn = d["server_name"]
+            if d.get("online", True) and sn not in self._metered:
+                self._metered.add(sn)
+                client = self.client
+                run_async(lambda c=client, s=sn: c.start_metering(s),
+                          lambda _r, err, s=sn: self._metered.discard(s) if err else None)
+
+    def _stop_metering(self, wait=False):
+        if self.feed:
+            self.feed.close()
+            self.feed = None
+        client, targets = self.client, list(self._metered)
+        self._metered.clear()
+        threads = []
+        for sn in targets:
+            def work(s=sn):
+                try:
+                    client.stop_metering(s)
+                except Exception:  # noqa: BLE001 - best effort
+                    pass
+            t = threading.Thread(target=work, daemon=True)
+            t.start()
+            threads.append(t)
+        if wait:
+            deadline = time.time() + 1.5
+            for t in threads:
+                t.join(max(0.0, deadline - time.time()))
+
+    def _meter_tick(self):
+        if self.meters_on and self.feed:
+            data = self.feed.read()
+            self.routing.update_meters(data)
+            self.detail.update_meters(self.devs.get(self.selected), data)
+        return True
+
+    def _on_close(self, *_):
+        if self.meters_on:
+            self._stop_metering(wait=True)
+        return False
 
     # --- status bar ---
     def _build_statusbar(self):
@@ -562,6 +733,8 @@ class Window(Adw.ApplicationWindow):
             return
         self._gen += 1                      # discard results from the previous backend
         self.busy = False
+        if self.meters_on:
+            self._stop_metering()
         if on:
             from .demo import DemoClient
             self.client = DemoClient()
@@ -576,6 +749,8 @@ class Window(Adw.ApplicationWindow):
         self.detail.show_device(None)
         self._apply_mode()
         self._set_banner(None)
+        if self.meters_on:
+            self._start_metering()
         self.connect_daemon()
 
     def _apply_mode(self):
@@ -653,6 +828,7 @@ class Window(Adw.ApplicationWindow):
             self.routing.update(devs)
             self._update_device_list()
             self._update_status()
+            self._sync_metering()
         run_async(fetch, done)
 
     # --- device list ---
