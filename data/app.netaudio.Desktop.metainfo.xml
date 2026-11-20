@@ -12,6 +12,9 @@
   <url type="homepage">https://tylerwoodward.me</url>
   <url type="bugtracker">https://github.com/thetylerwoodwardproject/netaudio-desktop/issues</url>
   <launchable type="desktop-id">app.netaudio.Desktop.desktop</launchable>
-  <releases><release version="2026.11.20" date="2026-11-20"/></releases>
+  <releases>
+    <release version="2026.11.21" date="2026-11-20"/>
+    <release version="2026.11.20" date="2026-11-20"/>
+  </releases>
   <content_rating type="oars-1.1"/>
 </component>

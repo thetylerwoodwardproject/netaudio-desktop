@@ -69,12 +69,11 @@ Discover devices, patch channels in a routing matrix, watch levels and clock syn
 Requires **Ubuntu 24.04 or newer** (or any distro with GTK 4 and **libadwaita 1.5+**) and Python 3.10+.
 Connect the computer to the network your Dante devices are on. A Dante PCIe card is **not** required for device control.
 
-> **Release status.** The packaged release [`v2026.11.20`](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases/latest)
-> predates live meters, presets, the Issues tab, audio settings & gain, the network-interface picker, click-through
-> navigation and the credits. Those are all on `main` — run from source to get everything today; the next tagged release
-> will bundle them.
+> **Latest release: [`v2026.11.21`](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases/latest)** — includes everything
+> described here (live meters, presets, Issues, audio settings & gain, the network-interface picker, credits). Download the
+> `.deb`, snap or wheel from the release page, or run from source below.
 
-### From source (everything on `main`)
+### From source
 
 ```bash
 git clone https://github.com/thetylerwoodwardproject/netaudio-desktop
