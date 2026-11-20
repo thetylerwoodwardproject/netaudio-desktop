@@ -15,7 +15,9 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Graphene, Gtk, Pango  # 
 from . import __version__  # noqa: E402
 from . import clock as clk  # noqa: E402
 from . import meters as mtr  # noqa: E402
+from . import devsettings as DS  # noqa: E402
 from . import presets as presets_mod  # noqa: E402
+from .issues_ui import IssuesView  # noqa: E402
 from .presets_ui import PresetsView, RestoreDialog, SaveDialog  # noqa: E402
 from .util import run_async  # noqa: E402
 from .api import DEFAULT_PORT, ApiError, Client, ensure_daemon  # noqa: E402
@@ -24,7 +26,7 @@ APP_ID = "app.netaudio.Desktop"
 ICON_NAME = "app.netaudio.Desktop"   # data/app.netaudio.Desktop.svg
 CONFIG = Path(GLib.get_user_config_dir()) / "netaudio-desktop" / "config.json"
 POLL_SECONDS = 3
-SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000]
+SEV_RANK = {"error": 0, "warning": 1, "info": 2}
 
 CSS = b"""
 .cell { min-width: 22px; min-height: 22px; padding: 0; margin: 1px; border-radius: 4px; }
@@ -472,34 +474,46 @@ class DeviceDetail(Adw.PreferencesPage):
             r.set_subtitle_selectable(True)
             info.add(r)
         self._add(info)
-        self._build_clock(d)
+        self._build_audio_settings(d)
 
         actions = Adw.PreferencesGroup(title="Device")
         rn = Adw.EntryRow(title="Device name", text=name, show_apply_button=True)
         rn.connect("apply", lambda row: self.win.do(
             lambda c: c.rename_device(d["server_name"], row.get_text()), f"Renamed to “{row.get_text()}”"))
         actions.add(rn)
-        sr = Adw.ComboRow(title="Sample rate", model=Gtk.StringList.new([f"{r} Hz" for r in SAMPLE_RATES]))
-        cur = d.get("sample_rate_hz")
-        if cur in SAMPLE_RATES:
-            sr.set_selected(SAMPLE_RATES.index(cur))
-        sr.connect("notify::selected", self._rate_changed, d, cur)
-        actions.add(sr)
         idr = Adw.ActionRow(title="Identify", subtitle="Flash the device’s indicator light")
         b = Gtk.Button(label="Identify", valign=Gtk.Align.CENTER)
         b.connect("clicked", lambda _b: self.win.do(lambda c: c.identify(d["server_name"]), "Identify sent"))
         idr.add_suffix(b)
         actions.add(idr)
         self._add(actions)
+        self._build_clock(d)
 
+        gain = DS.gain(d)
+        gain_ok = DS.can_write(d, "gain") and not DS.is_locked(d)
         for kind, key, title in (("tx", "transmitters", "Transmit channels"), ("rx", "receivers", "Receive channels")):
             chans = sorted_channels(d["channels"][key])
             if not chans:
                 continue
-            g = Adw.PreferencesGroup(title=title)
+            has_gain = bool(gain and gain["kind"] == kind)
+            g = Adw.PreferencesGroup(title=title, description=(
+                "Use the dropdown on each channel to set its reference (analog) level." if has_gain else ""))
             for n, ch in chans:
                 row = Adw.EntryRow(title=f"Channel {n}", text=ch_label(ch, n), show_apply_button=True)
                 row.set_sensitive(ch.get("can_rename") is not False)
+                if has_gain and n - 1 < len(gain["levels"]):
+                    values = [v for v, _l in gain["choices"]]
+                    dd = Gtk.DropDown(model=Gtk.StringList.new([l for _v, l in gain["choices"]]),
+                                      valign=Gtk.Align.CENTER, tooltip_text="Reference level",
+                                      sensitive=gain_ok)
+                    cur = gain["levels"][n - 1]
+                    dd.set_selected(values.index(cur) if cur in values else Gtk.INVALID_LIST_POSITION)
+                    dd.connect("notify::selected", lambda w, _p, n=n, values=values, gtype=gain["type"]:
+                               self.win.do(lambda c: c.set_gain(d["server_name"], n, gtype,
+                                                                values[w.get_selected()]),
+                                           f"Channel {n} reference level set")
+                               if w.get_selected() < len(values) else None)
+                    row.add_suffix(dd)
                 mbar = make_meter(vertical=False, visible=self.win.meters_on)
                 mbar.set_size_request(70, 6)
                 row.add_suffix(mbar)
@@ -621,10 +635,75 @@ class DeviceDetail(Adw.PreferencesPage):
         self.win.do(lambda c: c.set_preferred_leader(server_name, on),
                     "Set as preferred leader" if on else "Preferred leader cleared")
 
-    def _rate_changed(self, combo, _p, d, cur):
-        rate = SAMPLE_RATES[combo.get_selected()]
-        if rate != cur:
-            self.win.do(lambda c: c.set_sample_rate(d["server_name"], rate), f"Sample rate set to {rate} Hz")
+    def _confirm_change(self, heading, body, go, revert):
+        a = Adw.AlertDialog(heading=heading, body=body)
+        a.add_response("cancel", "Cancel")
+        a.add_response("apply", "Change")
+        a.set_response_appearance("apply", Adw.ResponseAppearance.DESTRUCTIVE)
+        a.set_close_response("cancel")
+        a.connect("response", lambda _d, r: go() if r == "apply" else revert())
+        a.present(self.win)
+
+    def _choice_row(self, group, title, labels, selected, apply_fn, ok_msg, subtitle="", enabled=True,
+                    warn="This can briefly interrupt audio on this device."):
+        row = Adw.ComboRow(title=title, subtitle=subtitle, model=Gtk.StringList.new(labels), sensitive=enabled)
+        row.set_use_markup(False)
+        if selected is not None:
+            row.set_selected(selected)
+        state = {"idx": selected, "busy": False}
+
+        def changed(r, _p):
+            new = r.get_selected()
+            if state["busy"] or new == state["idx"] or new >= len(labels):
+                return
+
+            def revert():
+                state["busy"] = True
+                r.set_selected(state["idx"] if state["idx"] is not None else Gtk.INVALID_LIST_POSITION)
+                state["busy"] = False
+
+            def go():
+                state["idx"] = new
+                self.win.do(lambda c: apply_fn(c, new), ok_msg(new))
+            self._confirm_change(f"Change {title.lower()} to {labels[new]}?", warn, go, revert)
+        row.connect("notify::selected", changed)
+        group.add(row)
+        return row
+
+    def _build_audio_settings(self, d):
+        sn = d["server_name"]
+        locked = DS.is_locked(d)
+        g = Adw.PreferencesGroup(title="Audio settings", description=(
+            "This device is locked — unlock it to change these settings." if locked else
+            "Changes are applied to the device immediately."))
+        rates = DS.rates(d)
+        cur = d.get("sample_rate_hz")
+        self._choice_row(g, "Sample rate", [f"{r} Hz" for r in rates], rates.index(cur) if cur in rates else None,
+                         lambda c, i: c.set_sample_rate(sn, rates[i]), lambda i: f"Sample rate set to {rates[i]} Hz",
+                         enabled=not locked and DS.can_write(d, "sample_rate", exclude=("pullup",)))
+        encs = DS.encodings(d)
+        cur = d.get("encoding")
+        self._choice_row(g, "Bit depth", [f"{e}-bit" for e in encs], encs.index(cur) if cur in encs else None,
+                         lambda c, i: c.set_encoding(sn, encs[i]), lambda i: f"Bit depth set to {encs[i]}-bit",
+                         enabled=not locked and DS.can_write(d, "encoding"))
+        lat = DS.latency_choices(d)
+        cur = DS.latency_current(d)
+        idx = next((i for i, v in enumerate(lat) if cur is not None and abs(v - cur) < 1e-9), None)
+        if lat:
+            self._choice_row(g, "Receive latency", [DS.fmt_ms(v) for v in lat], idx,
+                             lambda c, i: c.set_latency(sn, lat[i]), lambda i: f"Latency set to {DS.fmt_ms(lat[i])}",
+                             subtitle=DS.latency_hint(d), enabled=not locked and DS.can_write(d, "latency"),
+                             warn="Lower latency can cause dropouts on busy networks; it may need a reboot to apply.")
+        pu = DS.pullup(d)
+        if pu:
+            choices, curp = pu
+            self._choice_row(g, "Sample-rate pull-up", [lbl for _r, lbl in choices],
+                             next((i for i, (r, _l) in enumerate(choices) if r == curp), None),
+                             lambda c, i: c.set_pullup(sn, choices[i][0]),
+                             lambda i: f"Pull-up set to {choices[i][1]}",
+                             enabled=not locked and DS.can_write(d, "pullup"),
+                             warn="Pull-up changes the clock rate. Connected devices must use the same setting.")
+        self._add(g)
 
     def _add(self, g):
         self._groups.append(g)
@@ -699,6 +778,9 @@ class Window(Adw.ApplicationWindow):
         self.preset_store = self._real_store
         self.presets = PresetsView(self)
         self.stack.add_titled_with_icon(self.presets, "presets", "Presets", "document-save-symbolic")
+        self.issues = IssuesView(self)
+        self._issues_page = self.stack.add_titled_with_icon(self.issues, "issues", "Issues",
+                                                            "dialog-warning-symbolic")
 
         self.demo_banner = Adw.Banner(title="Demo mode — simulated devices, nothing is sent to your network",
                                       button_label="Exit Demo", action_name="app.demo")
@@ -722,18 +804,41 @@ class Window(Adw.ApplicationWindow):
         shortcut("<Primary>1", lambda: self.stack.set_visible_child_name("routing"))
         shortcut("<Primary>2", lambda: self.stack.set_visible_child_name("devices"))
         shortcut("<Primary>3", lambda: self.stack.set_visible_child_name("presets"))
+        shortcut("<Primary>4", lambda: self.stack.set_visible_child_name("issues"))
         shortcut("<Primary>m", lambda: self.meter_btn.set_active(not self.meter_btn.get_active()))
         shortcut("<Primary>f", self._focus_search)
         self.add_controller(key)
 
         GLib.timeout_add_seconds(POLL_SECONDS, self._tick)
         GLib.timeout_add(100, self._meter_tick)
+        GLib.timeout_add_seconds(10, self._issues_tick)
         self.connect("close-request", self._on_close)
         self._apply_mode()
         self.meter_btn.connect("toggled", lambda b: self.set_meters(b.get_active()))
         if cfg.get("meters"):
             self.meter_btn.set_active(True)
         self.connect_daemon()
+
+    # --- issues ---
+    def _issues_tick(self):
+        self.refresh_issues()
+        return True
+
+    def refresh_issues(self):
+        client, gen = self.client, self._gen
+
+        def done(page, err):
+            if err or gen != self._gen or client is not self.client:
+                return                                   # older daemons may not have /issues; stay quiet
+            self.issues.update(page)
+            n = page.get("active_count", 0)
+            self._issues_page.set_badge_number(n)
+            worst = min((SEV_RANK.get(i["severity"], 3) for i in page.get("issues", []) if i["state"] == "open"),
+                        default=None)
+            self.sb_issues.set_visible(n > 0)
+            if n:
+                self.sb_issues.set_label(f"{'⚠' if worst is not None and worst < 2 else 'ⓘ'} {n} issue{'s' if n != 1 else ''}")
+        run_async(lambda: client.issues(None, 100), done)
 
     # --- presets ---
     def _seed_demo_presets(self):
@@ -948,10 +1053,12 @@ class Window(Adw.ApplicationWindow):
         self.sb_devices = Gtk.Label(label="", xalign=0)
         self.sb_routes = Gtk.Label(label="", xalign=0)
         self.sb_clock_dot, self.sb_clock = make_dot(), Gtk.Label(label="Clock: —", xalign=0)
+        self.sb_issues = Gtk.Button(label="", has_frame=False, visible=False, tooltip_text="Show issues")
+        self.sb_issues.connect("clicked", lambda _b: self.stack.set_visible_child_name("issues"))
         self.sb_updated = Gtk.Label(label="", xalign=1, hexpand=True, halign=Gtk.Align.END)
         self.sb_updated.add_css_class("dim-label")
         for w in (self.sb_conn_dot, self.sb_conn, sep(), self.sb_iface, sep(), self.sb_devices, sep(), self.sb_routes, sep(),
-                  self.sb_clock_dot, self.sb_clock, self.sb_updated):
+                  self.sb_clock_dot, self.sb_clock, self.sb_issues, self.sb_updated):
             bar.append(w)
         return bar
 
@@ -998,6 +1105,9 @@ class Window(Adw.ApplicationWindow):
             return
         self._gen += 1                      # discard results from the previous backend
         self.busy = False
+        self.issues.update({"issues": []})
+        self._issues_page.set_badge_number(0)
+        self.sb_issues.set_visible(False)
         self._iface_checked, self.iface = False, None
         self.sb_iface.set_label("Network: —")
         if self.meters_on:
@@ -1049,6 +1159,7 @@ class Window(Adw.ApplicationWindow):
                     self.toast("Started netaudio daemon")
                 self._startup_interface_check()
                 self.refresh()
+                self.refresh_issues()
         run_async(lambda: ensure_daemon(self.client, self.cfg.get("port", DEFAULT_PORT),
                                         self.cfg.get("auto_start", True)), done)
 

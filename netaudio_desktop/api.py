@@ -1,6 +1,7 @@
 """Thin client for the NetAudio daemon HTTP API (stdlib only)."""
 import json
 import os
+import urllib.parse
 import shutil
 import subprocess
 import time
@@ -120,6 +121,26 @@ class Client:
 
     def set_preferred_leader(self, device, preferred):
         return self.post("/set-preferred-leader", {"device": device, "preferred": bool(preferred)}, timeout=30)
+
+    def set_latency(self, device, ms):
+        return self.post("/set-latency", {"device": device, "latency": float(ms)}, timeout=30)
+
+    def set_encoding(self, device, bits):
+        return self.post("/set-encoding", {"device": device, "encoding": int(bits)}, timeout=30)
+
+    def set_pullup(self, device, raw_value):
+        return self.post("/set-sample-rate-pullup", {"device": device, "raw_value": int(raw_value)}, timeout=30)
+
+    def set_gain(self, device, channel_number, device_type, gain_level):
+        """gain_level is the device-advertised integer choice (not dB)."""
+        return self.post("/set-gain", {"device": device, "channel_number": int(channel_number),
+                                       "device_type": device_type, "gain_level": int(gain_level)}, timeout=30)
+
+    def issues(self, state="open", limit=200):
+        q = {"limit": limit}
+        if state:
+            q["state"] = state
+        return self.get("/issues?" + urllib.parse.urlencode(q), timeout=10)
 
     def set_sample_rate(self, device, rate):
         return self.post("/set-sample-rate", {"device": device, "sample_rate": rate}, timeout=60)

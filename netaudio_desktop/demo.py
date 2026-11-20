@@ -42,6 +42,7 @@ class DemoClient:
         ):
             self.d[dev["server_name"]] = dev
         self._ifaces = []
+        self._init_settings()
         self.preferred = "Stagebox-A"
         self._eui = {d["name"]: "00:1d:c1:ff:fe:" + d["mac_address"].lower()[-8:] for d in self.d.values()}
         self._rng = random.Random(7)
@@ -110,6 +111,90 @@ class DemoClient:
                 cs["synchronization"], cs["servo_state"] = "synchronizing", "acquiring"
                 if self._rng.random() < 0.3:
                     cs["synchronization"], cs["servo_state"] = "synchronized", "locked"
+
+    # --- audio settings, gain and issues (simulated) ---
+    GAIN_CHOICES = [{"label": "+24 dBu", "value": 1}, {"label": "+18 dBu", "value": 2},
+                    {"label": "+4 dBu", "value": 3}, {"label": "0 dBu", "value": 4},
+                    {"label": "−10 dBV", "value": 5}]
+
+    def _init_settings(self):
+        for d in self.d.values():
+            d.update({"standard_latency_choices_ms": [0.25, 0.5, 1.0, 2.0, 5.0], "min_latency_ms": 0.15,
+                      "max_latency_ms": 5.0, "default_latency_ms": 1.0, "configured_latency_ms": 1.0,
+                      "active_latency_ms": 1.0, "supported_sample_rates_hz": [44100, 48000, 88200, 96000],
+                      "sample_rate_pullup_raw_value": 0, "requested_sample_rate_pullup_raw_value": 0,
+                      "supported_sample_rate_pullup_raw_values": [0, 1, 2, 3, 4],
+                      "sample_rate_pullup_configuration_supported": d["name"] != "Laptop-Dante",
+                      "is_locked": False})
+            if d["name"] == "Stagebox-A":
+                d.update({"gain_device_type": "input", "gain_level_choices": copy.deepcopy(self.GAIN_CHOICES),
+                          "gain_levels": [3] * len(d["channels"]["transmitters"])})
+            if d["name"] == "Amp-Rack":
+                d.update({"gain_device_type": "output", "gain_level_choices": copy.deepcopy(self.GAIN_CHOICES),
+                          "gain_levels": [3] * len(d["channels"]["receivers"])})
+        self._t0 = time.time()
+
+    def set_latency(self, device, ms):
+        d = self._find(device)
+        if not (d["min_latency_ms"] <= ms <= d["max_latency_ms"]):
+            raise ApiError(f"Latency must be between {d['min_latency_ms']:g} and {d['max_latency_ms']:g} ms")
+        d["configured_latency_ms"] = d["latency_ms"] = ms
+        return {"success": True}
+
+    def set_encoding(self, device, bits):
+        self._find(device)["encoding"] = bits
+        return {"success": True}
+
+    def set_pullup(self, device, raw_value):
+        d = self._find(device)
+        if raw_value not in d["supported_sample_rate_pullup_raw_values"]:
+            raise ApiError("Unsupported pull-up value")
+        d["requested_sample_rate_pullup_raw_value"] = d["sample_rate_pullup_raw_value"] = raw_value
+        return {"success": True}
+
+    def set_gain(self, device, channel_number, device_type, gain_level):
+        d = self._find(device)
+        if d.get("gain_device_type") != device_type:
+            raise ApiError("This device has no reference-level controls of that type")
+        d["gain_levels"][channel_number - 1] = gain_level
+        return {"success": True}
+
+    def issues(self, state="open", limit=200):
+        now = time.time()
+        iso = lambda ago: time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now - ago))  # noqa: E731
+
+        def issue(i, kind, sev, dev, title, summary, fix, first, last, count, resolved=None, **scope):
+            return {"issue_id": f"demo-{i}", "kind": kind, "severity": sev, "state": "resolved" if resolved else "open",
+                    "title": title, "summary": summary, "suggested_remediation": fix,
+                    "first_seen": iso(first), "last_seen": iso(last), "resolved_at": iso(resolved) if resolved else None,
+                    "occurrence_count": count, "evidence_class": "direct_observation", "evidence_source": "demo",
+                    "observation_state": "observed", "schema_version": 1, "raw_source_fields": {},
+                    "scope": dict({"device_name": dev, "server_name": f"{dev}.local.", "device_identity": dev,
+                                   "channel_identity": None, "flow_identity": None, "interface_identity": None},
+                                  **scope)}
+        items = []
+        if "Laptop-Dante" in {d["name"] for d in self.d.values()}:
+            items.append(issue(1, "clock_synchronization", "warning", "Laptop-Dante", "Clock not locked",
+                               "The device is still synchronising to the grandmaster clock and has not reached lock.",
+                               "Check the network path to the grandmaster and wait a minute. Persistent trouble "
+                               "suggests excess jitter or a switch without PTP support.", 540, 3, 14))
+        if "Recorder" in {d["name"] for d in self.d.values()}:
+            items.append(issue(2, "receiver_latency_pressure", "warning", "Recorder", "Receive latency is tight",
+                               "Packets are arriving close to the playout deadline at the configured latency of 1 ms.",
+                               "Increase the receive latency (Devices → Audio settings) or shorten the network path.",
+                               3100, 45, 9, channel_identity="Track 1"))
+            items.append(issue(3, "reboot_required", "info", "Recorder", "Reboot needed to apply a setting",
+                               "A configured setting will take effect after the next restart.",
+                               "Restart the device when convenient.", 7200, 7100, 1))
+            items.append(issue(4, "subscription_failure", "error", "Recorder", "Subscription failed",
+                               "Receive channel 2 could not connect to its transmitter.",
+                               "Verify the transmitting device is online and the route is still valid.",
+                               86000, 85900, 2, resolved=85000, channel_identity="Track 2"))
+        if state == "open":
+            items = [i for i in items if i["state"] == "open"]
+        active = sum(1 for i in items if i["state"] == "open")
+        return {"active_count": active, "count": len(items), "history_limit": 1000, "issues": items[:limit],
+                "next_cursor": None, "schema_version": 1}
 
     # --- presets (simulated: a small XML dialect, applied to the in-memory devices) ---
     def capture_preset(self, devices, name, sections):
