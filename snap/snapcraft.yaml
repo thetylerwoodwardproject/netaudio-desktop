@@ -9,6 +9,7 @@ description: |
   sample rates and identify hardware. Bundles the public-domain (Unlicense) netaudio
   daemon. Unofficial; not affiliated with Audinate.
 license: MIT
+icon: data/app.netaudio.Desktop.svg
 grade: stable
 confinement: strict
 platforms:
@@ -46,6 +47,10 @@ parts:
       sed -i 's|^Icon=.*|Icon=${SNAP}/usr/share/icons/hicolor/scalable/apps/app.netaudio.Desktop.svg|' \
         "$CRAFT_PART_INSTALL/usr/share/applications/app.netaudio.Desktop.desktop"
       install -m644 data/app.netaudio.Desktop.svg "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/scalable/apps/"
+      for png in data/icons/hicolor/*/apps/app.netaudio.Desktop.png; do
+        size="$(basename "$(dirname "$(dirname "$png")")")"
+        install -Dm644 "$png" "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/$size/apps/app.netaudio.Desktop.png"
+      done
       install -m644 data/app.netaudio.Desktop.metainfo.xml "$CRAFT_PART_INSTALL/usr/share/metainfo/"
 
   netaudio-daemon:

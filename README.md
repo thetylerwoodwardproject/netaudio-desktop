@@ -1,25 +1,35 @@
 <div align="center">
 
-<img src="data/app.netaudio.Desktop.svg" width="96" alt="NetAudio Desktop icon">
+<img src="data/app.netaudio.Desktop.svg" width="112" alt="NetAudio Desktop icon">
 
 # NetAudio Desktop
 
 **A native Linux desktop app for Dante audio networks.**<br>
-Discover devices, patch channels in a routing matrix, and keep an eye on clock sync — all from a clean GNOME-style window.
+Discover devices, patch channels in a routing matrix, watch levels and clock sync, save and restore whole setups — in a clean GNOME-style window.
 
 [![Release](https://img.shields.io/github/v/release/thetylerwoodwardproject/netaudio-desktop?style=flat-square&color=3584e4)](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/thetylerwoodwardproject/netaudio-desktop/release.yml?style=flat-square&label=build)](https://github.com/thetylerwoodwardproject/netaudio-desktop/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Linux-informational?style=flat-square)
-![GTK4 + libadwaita](https://img.shields.io/badge/GTK4-libadwaita-4a86cf?style=flat-square)
+![GTK4 + libadwaita](https://img.shields.io/badge/GTK4-libadwaita%201.5%2B-4a86cf?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.10%2B-yellow?style=flat-square)
 
-<img src="docs/screenshots/routing.png" width="560" alt="Routing matrix">
+[**Download**](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases) ·
+[Features](#-features) ·
+[Screenshots](#-screenshots) ·
+[Install](#-install) ·
+[Try demo mode](#-try-it-without-any-hardware) ·
+[Credits](#-credits)
+
+<br>
+
+<img src="docs/screenshots/routing.png" width="720" alt="The routing matrix with live meters, channel names on both axes and clock health in the status bar">
 
 </div>
 
-> **Unofficial.** Built on the open-source [NetAudio](https://netaudio.app/linux) daemon
+> **Unofficial.** NetAudio Desktop is a front end for the open-source [NetAudio](https://netaudio.app/linux) daemon
 > ([chris-ritsen/network-audio-controller](https://github.com/chris-ritsen/network-audio-controller)).
-> Not affiliated with or endorsed by Audinate. “Dante” is a trademark of Audinate Pty Ltd.
+> It is not affiliated with or endorsed by Audinate. “Dante” is a registered trademark of Audinate Pty Ltd.
 
 ---
 
@@ -27,55 +37,65 @@ Discover devices, patch channels in a routing matrix, and keep an eye on clock s
 
 | | |
 |---|---|
-| 🔀 **Routing matrix** | Receivers as rows, transmitters as columns, with channel names on both axes (transmit names read vertically above each column). Click a cell to subscribe, click again to clear. One source per receive channel, kept in sync with the network every few seconds. |
-| ✏️ **Rename in place** | Click a receive channel name (row) or a transmit channel number (column header) to rename it right from the matrix. |
-| 🎚️ **Live meters** | Press the speaker button in the header to show level bars on every channel in the matrix and on device pages. Channel names turn green when **audio is present**; bars go amber when hot and red on clipping. Opt-in, since it asks devices to stream meter data. |
-| 🎛️ **Audio settings & gain** | Change sample rate, bit depth, receive latency and sample-rate pull-up from the device page, using the choices each device advertises. Per-channel **reference-level (gain)** dropdowns appear on devices that support them. Anything that can interrupt audio asks first. |
-| ⚠️ **Issues** | An **Issues** tab (with a badge and a status-bar chip) lists what the daemon is flagging — clock not locked, tight receive latency, failed subscriptions, reboot needed — with a suggested fix and a link to the device. Recently resolved problems stay visible for reference. |
-| 💾 **Presets** | Save the current routing, channel names, audio settings and device controls as a preset, and restore it later. Restoring **always shows a plan first** — every setting that will change, already matches, or can't be applied — and nothing is written until you confirm. Presets are plain XML files you can export, import and share. |
-| 🌐 **Pick your Dante network** | On first launch (when you have more than one network interface) the app asks which one your Dante devices are on — or two, for a redundant network. Change it any time from the status bar or the ☰ menu. |
-| 🔗 **Click through** | Click a device name in the routing matrix to jump straight to its page; a hover crosshair shows exactly which row and column you're about to patch. |
-| 🕒 **Clock & sync** | See each device’s clock role, sync state, frequency offset, drift, **who the grandmaster is** and who each device syncs to, plus per-port status. Toggle **Preferred leader** from the app. |
-| 📟 **Device details** | IP/MAC, sample rate, encoding, latency, channel counts. Rename devices, change sample rate, or flash a device’s identify light. |
-| 📊 **Status bar** | Daemon connection, devices online, route count and overall clock health (`grandmaster Stagebox-A · 5/5 in sync`) at a glance. |
-| 🧪 **Demo mode** | No Dante gear? Flip on **Demo mode** for a fully interactive simulated network. |
-| 🚀 **Zero setup** | Starts the NetAudio daemon for you if it isn’t already running. |
+| 🔀 **Routing matrix** | Receivers as rows, transmitters as columns, with channel names on both axes (transmit names read vertically above each column). Click a cell to patch, click again to clear. A hover crosshair shows exactly which row and column you're about to change. |
+| ✏️ **Rename anywhere** | Click a channel label in the matrix, or edit names on the device page. Click a device name to jump to its page. |
+| 🎚️ **Live meters** | One button turns on level bars for every channel. Names turn green when **audio is present**; bars go amber when hot and red on clipping. Opt-in, because it asks devices to stream meter data. |
+| 🕒 **Clock & sync** | Each device's clock role, sync state, frequency offset and drift; **who the grandmaster is** and who each device syncs to; per-port status; a **Preferred leader** switch. Overall health lives in the status bar. |
+| 🎛️ **Audio settings & gain** | Sample rate, bit depth, receive latency and pull-up from the choices each device advertises, plus per-channel **reference-level (gain)** dropdowns on devices that have them. Anything that can interrupt audio asks first. |
+| 💾 **Presets** | Save routing, channel names, audio settings and device controls — and restore them later. A restore **always shows a plan first**: what will change, what already matches, what can't be applied. Nothing is written until you confirm. Presets are plain XML you can export, import and share. |
+| ⚠️ **Issues** | An **Issues** tab (badge + status-bar chip) lists what the daemon is flagging — clock not locked, tight receive latency, failed subscriptions, reboot needed — with a suggested fix and a link to the device. |
+| 🌐 **Pick your Dante network** | On first launch (with more than one network interface) the app asks which one your devices are on — or two, for a redundant network. Change it any time from the status bar. |
+| 🧪 **Demo mode** | No Dante gear? Flip on **Demo mode** for a fully interactive simulated network, including presets, meters and issues. |
+| 🚀 **Zero setup** | Starts the NetAudio daemon for you if it isn't already running. |
 
-<div align="center">
-<img src="docs/screenshots/presets.png" width="560" alt="Restoring a preset: review the plan before anything changes">
-<br><br>
-<img src="docs/screenshots/issues.png" width="560" alt="Issues tab with suggested fixes">
-<br><br>
-<img src="docs/screenshots/devices.png" width="560" alt="Device details with clock and sync information">
-</div>
+## 📸 Screenshots
+
+<table>
+<tr>
+<td width="50%" align="center"><img src="docs/screenshots/devices.png" alt="Device page with audio settings"><br><sub><b>Devices</b> — info, audio settings, clock &amp; sync, per-channel names and gain</sub></td>
+<td width="50%" align="center"><img src="docs/screenshots/presets.png" alt="Restore plan"><br><sub><b>Presets</b> — review exactly what a restore will change before applying</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/issues.png" alt="Issues tab"><br><sub><b>Issues</b> — what's wrong, why, and what to try</sub></td>
+<td align="center"><img src="docs/screenshots/interface.png" alt="Network interface picker"><br><sub><b>Network</b> — choose the interface your Dante devices are on</sub></td>
+</tr>
+<tr>
+<td colspan="2" align="center"><img src="docs/screenshots/about.png" width="50%" alt="About dialog with credits"><br><sub><b>About</b> — credits, acknowledgements and legal notices</sub></td>
+</tr>
+</table>
 
 ## 📦 Install
 
-Download the latest package from the [Releases page](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases).
+Requires **Ubuntu 24.04 or newer** (or any distro with GTK 4 and **libadwaita 1.5+**) and Python 3.10+.
+Connect the computer to the network your Dante devices are on. A Dante PCIe card is **not** required for device control.
+
+> **Release status.** The packaged release [`v2026.11.20`](https://github.com/thetylerwoodwardproject/netaudio-desktop/releases/latest)
+> predates live meters, presets, the Issues tab, audio settings & gain, the network-interface picker, click-through
+> navigation and the credits. Those are all on `main` — run from source to get everything today; the next tagged release
+> will bundle them.
+
+### From source (everything on `main`)
+
+```bash
+git clone https://github.com/thetylerwoodwardproject/netaudio-desktop
+cd netaudio-desktop
+sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+uv tool install netaudio          # the daemon — see below
+./install.sh                      # adds “NetAudio” to your app menu (optional)
+./netaudio-desktop                # or just run it in place
+```
 
 ### Debian / Ubuntu (`.deb`)
 
 ```bash
 sudo apt install ./netaudio-desktop_*_all.deb
-uv tool install netaudio          # provides the netaudio daemon (see below)
+uv tool install netaudio          # the daemon is installed separately
 ```
 
 ### Snap (bundles the daemon)
 
 ```bash
 sudo snap install --dangerous ./netaudio-desktop_*.snap
-```
-
-### From source
-
-```bash
-git clone https://github.com/thetylerwoodwardproject/netaudio-desktop
-cd netaudio-desktop
-sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
-uv tool install netaudio          # the daemon
-./install.sh                      # adds “NetAudio” to your app menu
-# …or just run it in place:
-./netaudio-desktop
 ```
 
 <details>
@@ -89,66 +109,133 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # if you don't have uv yet
 uv tool install netaudio
 ```
 
-Connect the computer to the network your Dante devices are on. A Dante PCIe card is **not** required for device control.
+The app finds and starts `netaudio-daemon` for you. If you already run a daemon, it connects to that one
+(default port `4780`, configurable in Preferences).
 </details>
+
+## 🚀 Quick start
+
+1. Launch **NetAudio** from your app menu (or `./netaudio-desktop`).
+2. If asked, pick the network interface your Dante devices are connected to.
+3. The **Routing** tab fills with your devices. Click a cell to patch a transmitter into a receiver.
+4. Press the 🔊 button for live meters; open **Devices** for clock sync, audio settings and gain.
+5. On **Presets**, save the setup you like. Restore it any time — you'll see the plan before anything changes.
 
 ## 🧪 Try it without any hardware
 
 Open the main menu (☰) → **Demo mode**, or press **Try Demo Mode** on the empty screen.
-You get five simulated devices with routes and a live clock — route channels, rename things,
-change the grandmaster. Nothing touches your network. Launch straight into it with:
+You get five simulated devices with routes, a live clock, meters and a few issues. Route channels,
+rename things, move the grandmaster, save a preset, scramble the setup and restore it. Nothing touches your network.
 
 ```bash
-netaudio-desktop --demo
+netaudio-desktop --demo        # launch straight into it
 ```
 
-## 🖱️ Using it
+## ⌨️ Keyboard shortcuts
 
-- **Routing** — click a cell to patch, click a lit cell to unpatch. Hover headers for full channel names.
-- **Rename channels** — click a channel label in the matrix, or edit it on the **Devices** page.
-- **Devices** — pick a device on the left for details, clock & sync, and settings.
-- **Meters** — the 🔊 button in the header turns live levels and signal-presence on or off (remembered between runs). Hover a channel for its exact dBFS.
-- **Audio settings** — on a device's page, change sample rate, bit depth, latency or pull-up (you'll be asked to confirm); gain dropdowns sit beside each channel on devices that expose reference levels. Controls are disabled when a device is locked.
-- **Issues** — the **Issues** tab shows open problems and a short history; expand one for what's happening, a suggested fix and **Open device page**.
-- **Presets** — on the **Presets** tab choose **Save Current Setup…**, pick the devices and what to include, and name it. **Restore…** maps the preset's devices onto devices on your network (handy when hardware changed), shows the plan, and asks you to confirm before applying. Files live in `~/.local/share/netaudio-desktop/presets/`.
-- **Network interface** — shown in the status bar (`Network: enp3s0`); click it, or use ☰ → *Network interface…*, to switch. Turn on *Ask every time I launch* if you move between networks.
-- **Open a device** — click its name in the matrix; **Show in Routing** on the device page takes you back. Use the search box to filter long device lists.
-- **Keyboard** — `Ctrl+1` Routing · `Ctrl+2` Devices · `Ctrl+3` Presets · `Ctrl+4` Issues · `Ctrl+F` search · `Ctrl+M` meters · `F5` rescan.
-- **Rescan** — `F5` or the ↻ button.
-- **Preferences** — daemon port (default `4780`) and auto-start, in the ☰ menu.
+| Keys | Action | Keys | Action |
+|---|---|---|---|
+| `Ctrl+1` | Routing | `Ctrl+4` | Issues |
+| `Ctrl+2` | Devices | `Ctrl+M` | Toggle meters |
+| `Ctrl+3` | Presets | `Ctrl+F` | Search devices |
+| `F5` | Rescan the network | `Ctrl+Q` | Quit |
+
+## 🛡️ Safety
+
+NetAudio Desktop controls live audio gear, so it is conservative by default:
+
+- **Presets never apply blindly.** Capture only reads. Restore builds a read-only plan first, and the daemon refuses an
+  apply whose plan is stale. You confirm explicitly.
+- **Disruptive changes ask first** — sample rate, bit depth, latency, pull-up — and cancelling restores the control.
+- **Locked devices** have their controls disabled.
+- **Meters are opt-in**, and the app tells devices to stop when you switch them off or close the window.
+- **Demo mode never touches your network** and uses its own in-memory presets.
 
 ## 🔧 How it works
 
 ```
  NetAudio Desktop (GTK4 / libadwaita)
-          │  HTTP + JSON  (127.0.0.1:4780)
+          │  HTTP + JSON, and a live event stream  (127.0.0.1:4780)
           ▼
    netaudio daemon  ──►  Dante devices on your LAN
 ```
 
-The app talks only to the daemon’s documented local HTTP API (`/devices`, `/subscribe`,
-`/rename-channel`, `/set-preferred-leader`, `/metering/*`, `/presets/*`, `/issues`, `/set-gain`, `/set-latency`, …), reads live meter values from its
-`/events` stream,, uses just the Python standard library for
-networking, and keeps the UI responsive by doing all requests off the main thread.
+The app talks only to the daemon's documented local HTTP API, using the Python standard library for networking,
+and does all requests off the main thread so the UI stays responsive.
+
+| Feature | Daemon API |
+|---|---|
+| Devices, routing, names | `/devices` · `/subscribe` · `/unsubscribe` · `/rename-device` · `/rename-channel` · `/identify` |
+| Clock & sync | `clock_status` in `/devices` · `/set-preferred-leader` |
+| Meters & signal presence | `/events` (`meter_values`) · `/metering/start` · `/metering/stop` |
+| Audio settings & gain | `/set-sample-rate` · `/set-encoding` · `/set-latency` · `/set-sample-rate-pullup` · `/set-gain` |
+| Presets | `/presets/save` · `/presets/preview` · `/presets/plan` · `/presets/load` |
+| Issues | `/issues` |
+| Network interface | `/settings` · `/settings/network` |
+
+**Your files:** settings in `~/.config/netaudio-desktop/config.json`; presets in
+`~/.local/share/netaudio-desktop/presets/` (one `.xml` plus a small `.json` sidecar each).
 
 ## 🛠️ Building packages
 
 | Package | Command |
 |---|---|
 | `.deb` | `./packaging/build-deb.sh` → `dist/` |
-| Python wheel | `python -m build` |
+| Python wheel / sdist | `python -m build` |
 | Snap | `snapcraft` |
 
-Pushing a tag like `v2026.11.20` runs [the release workflow](.github/workflows/release.yml), which builds
-all three and attaches them to a GitHub Release. Versions are calendar-based: `YYYY.MM.DD`.
+Pushing a tag like `v2026.11.20` runs [the release workflow](.github/workflows/release.yml), which builds all three and
+attaches them to a GitHub Release. Versions are calendar-based: `YYYY.MM.DD`.
+
+<details>
+<summary><b>Project layout</b></summary>
+
+```
+netaudio_desktop/
+  app.py          main window, routing matrix, device pages, status bar
+  api.py          thin client for the daemon's HTTP API (stdlib only)
+  meters.py       meter_values event-stream reader + demo simulator
+  clock.py        grandmaster / sync-health interpretation
+  devsettings.py  latency, rate, pull-up and gain helpers
+  presets.py      preset storage and plan helpers (no GTK)
+  presets_ui.py   Presets tab: save and restore dialogs
+  issues_ui.py    Issues tab
+  demo.py         in-memory simulator used by demo mode
+data/             icon, desktop entry, appstream metadata
+packaging/        .deb builder · snap/ snapcraft.yaml · .github/ release workflow
+```
+</details>
 
 ## ⚠️ Status
 
-This project is young. It is built against the daemon’s published API and exercised against a
-built-in simulator, but **it has not yet been tested on a real Dante network**. Expect rough edges —
-especially around clock-health colouring, which interprets the daemon’s status text heuristically
-(the raw values are always shown next to it). Bug reports and hardware feedback are very welcome.
+This project is young. It is built against the daemon's published API and exercised against a built-in simulator
+and mock daemons, but **it has not yet been tested on a real Dante network**. Expect rough edges —
+particularly clock-health colouring (which interprets the daemon's status text heuristically; the raw values are always
+shown beside it), device-ID handling in presets, and how real devices report gain and latency choices.
+There is no automated test suite yet.
+
+**Hardware feedback is very welcome.** If you have Dante gear, please
+[open an issue](https://github.com/thetylerwoodwardproject/netaudio-desktop/issues) with what you tried and what you saw
+(the device models help a lot).
+
+### Ideas for later
+
+Host-audio view (JACK/PulseAudio ↔ Dante), AES67 / external flows, transmit-flow editing, full clock configuration,
+bulk routing selection, Dante Domain Manager awareness.
+
+## 🙏 Credits
+
+- **[NetAudio](https://netaudio.app/linux)** by [chris-ritsen](https://github.com/chris-ritsen/network-audio-controller) —
+  the daemon, API and all of the Dante protocol work this app is built on. None of this exists without it. Go star it.
+- **Dante** and **[Audinate](https://www.getdante.com)** — the audio-over-IP technology that makes networked audio
+  practical. Dante® is a registered trademark of Audinate Pty Ltd.
+- **Made with the help of machines.** This project was designed and written with the help of AI
+  ([Claude](https://www.anthropic.com), by Anthropic), under human direction and review.
+- **[The Tyler Woodward Project](https://tylerwoodward.me)** — direction, testing and the app itself.
+- Built with [GTK 4](https://www.gtk.org), [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) and
+  [PyGObject](https://pygobject.gnome.org).
 
 ## 📄 License
 
-[MIT](LICENSE). The `netaudio` daemon is a separate project released under the Unlicense.
+[MIT](LICENSE). The `netaudio` daemon is a separate project released into the public domain under the
+[Unlicense](https://unlicense.org).

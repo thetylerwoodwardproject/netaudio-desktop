@@ -23,7 +23,7 @@ from .util import run_async  # noqa: E402
 from .api import DEFAULT_PORT, ApiError, Client, ensure_daemon  # noqa: E402
 
 APP_ID = "app.netaudio.Desktop"
-ICON_NAME = "app.netaudio.Desktop"   # data/app.netaudio.Desktop.svg
+ICON_NAME = "app.netaudio.Desktop"   # data/app.netaudio.Desktop.svg (+ PNGs in data/icons)
 CONFIG = Path(GLib.get_user_config_dir()) / "netaudio-desktop" / "config.json"
 POLL_SECONDS = 3
 SEV_RANK = {"error": 0, "warning": 1, "info": 2}
@@ -1413,11 +1413,33 @@ class App(Adw.Application):
         PrefsDialog(self.cfg, save).present(self.win)
 
     def _about(self, *_):
-        Adw.AboutDialog(application_name="NetAudio Desktop", application_icon=ICON_NAME,
-                        version=__version__, developer_name="Unofficial",
-                        comments="A native Linux front end for the NetAudio daemon "
-                                 "(chris-ritsen/network-audio-controller). Not affiliated with Audinate.",
-                        website="https://netaudio.app/linux", license_type=Gtk.License.MIT_X11).present(self.win)
+        me = "The Tyler Woodward Project https://tylerwoodward.me"
+        dlg = Adw.AboutDialog(
+            application_name="NetAudio Desktop", application_icon=ICON_NAME, version=__version__,
+            developer_name="The Tyler Woodward Project", website="https://tylerwoodward.me",
+            issue_url="https://github.com/thetylerwoodwardproject/netaudio-desktop/issues",
+            copyright="© 2026 NetAudio Desktop contributors", license_type=Gtk.License.MIT_X11,
+            comments="A native Linux controller for Dante audio networks, built on the NetAudio daemon. "
+                     "Unofficial — not affiliated with or endorsed by Audinate.")
+        dlg.set_developers([me])
+        dlg.set_designers([me])
+        dlg.add_link("Source code", "https://github.com/thetylerwoodwardproject/netaudio-desktop")
+        dlg.add_link("NetAudio", "https://netaudio.app")
+        dlg.add_acknowledgement_section("Built on", [
+            "NetAudio — the daemon, API and protocol work behind this app, by chris-ritsen "
+            "https://github.com/chris-ritsen/network-audio-controller",
+            "Dante — the audio-over-IP technology this app controls, by Audinate https://www.getdante.com"])
+        dlg.add_acknowledgement_section("Made with the help of machines", [
+            "This project was written with the help of AI (Claude, by Anthropic) https://www.anthropic.com"])
+        dlg.add_legal_section(
+            "NetAudio", "Public domain", Gtk.License.CUSTOM,
+            "NetAudio, the daemon this app talks to, is a separate project released into the public domain "
+            "under the Unlicense. https://unlicense.org")
+        dlg.add_legal_section(
+            "Dante", None, Gtk.License.CUSTOM,
+            "Dante® is a registered trademark of Audinate Pty Ltd. NetAudio Desktop is an independent, "
+            "unofficial project and is not affiliated with, or endorsed by, Audinate.")
+        dlg.present(self.win)
 
 
 DEMO = False

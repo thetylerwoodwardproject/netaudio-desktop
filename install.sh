@@ -12,6 +12,10 @@ fi
 
 install -Dm644 "$here/data/app.netaudio.Desktop.svg" \
   "$HOME/.local/share/icons/hicolor/scalable/apps/app.netaudio.Desktop.svg"
+for png in "$here"/data/icons/hicolor/*/apps/app.netaudio.Desktop.png; do
+  size="$(basename "$(dirname "$(dirname "$png")")")"
+  install -Dm644 "$png" "$HOME/.local/share/icons/hicolor/$size/apps/app.netaudio.Desktop.png"
+done
 sed "s|@EXEC@|$here/netaudio-desktop|" "$here/data/app.netaudio.Desktop.desktop" \
   > "$HOME/.local/share/applications/app.netaudio.Desktop.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true

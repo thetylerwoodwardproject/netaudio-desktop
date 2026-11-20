@@ -8,6 +8,9 @@
   <description>
     <p>A native GNOME-style front end for the NetAudio daemon. Browse Dante devices, route channels in a matrix, rename devices and channels, set sample rates and identify hardware. Unofficial and not affiliated with Audinate.</p>
   </description>
+  <icon type="stock">app.netaudio.Desktop</icon>
+  <url type="homepage">https://tylerwoodward.me</url>
+  <url type="bugtracker">https://github.com/thetylerwoodwardproject/netaudio-desktop/issues</url>
   <launchable type="desktop-id">app.netaudio.Desktop.desktop</launchable>
   <releases><release version="2026.11.20" date="2026-11-20"/></releases>
   <content_rating type="oars-1.1"/>

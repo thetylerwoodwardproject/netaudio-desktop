@@ -16,6 +16,10 @@ printf '#!/bin/sh\nexec python3 -m netaudio_desktop "$@"\n' > "$pkg/usr/bin/neta
 chmod 755 "$pkg/usr/bin/netaudio-desktop"
 sed 's|@EXEC@|netaudio-desktop|' "$here/data/app.netaudio.Desktop.desktop" > "$pkg/usr/share/applications/app.netaudio.Desktop.desktop"
 install -m644 "$here/data/app.netaudio.Desktop.svg" "$pkg/usr/share/icons/hicolor/scalable/apps/"
+for png in "$here"/data/icons/hicolor/*/apps/app.netaudio.Desktop.png; do
+  size="$(basename "$(dirname "$(dirname "$png")")")"
+  install -Dm644 "$png" "$pkg/usr/share/icons/hicolor/$size/apps/app.netaudio.Desktop.png"
+done
 install -m644 "$here/data/app.netaudio.Desktop.metainfo.xml" "$pkg/usr/share/metainfo/"
 install -m644 "$here/LICENSE" "$pkg/usr/share/doc/netaudio-desktop/copyright"
 
