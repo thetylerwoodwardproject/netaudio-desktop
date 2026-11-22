@@ -75,6 +75,14 @@ Removed: `netaudio_desktop/`, `netaudio-desktop` launcher, `install.sh`, `packag
   - Windows: `%APPDATA%\NetAudio Desktop\config.json`, `%APPDATA%\NetAudio Desktop\Presets\`.
   - Presets stay plain XML and are compatible with the old app's files.
 
+### 3a. Daemon on Windows (bundled, not rewritten)
+- **Upstream already supports Windows.** NetAudio's release CI builds a `windows-x86_64` wheel containing the native Rust `netaudio-daemon.exe`, its quality checks run on `windows-latest`, and the daemon has `#[cfg(windows)]` code paths. Only the virtual soundcard (`audio serve`, `clock-serve`), the `/host-audio/*` JACK/PulseAudio bridge and the video adapters are Linux-only, and this app uses none of them.
+- **Not rewriting.** Re-implementing the Dante control protocol in C++ would be tens of thousands of lines of reverse-engineered work, and would cut us off from upstream fixes. The app stays a C++ front end that talks to the daemon over localhost HTTP/SSE.
+- **Shipping:** CI downloads the pinned `netaudio` `win_amd64` wheel from PyPI, checks its SHA-256 and extracts `netaudio-daemon.exe`. The fallback is `cargo build -p netaudio-daemon --release` from the pinned upstream tag. The installer puts it in `C:\Program Files\NetAudio Desktop\daemon\`, adds an Unlicense notice to `NOTICE`, and adds Windows Firewall rules for private networks.
+- **Running it:** `DaemonSupervisor` starts it hidden (`CREATE_NO_WINDOW`, `--port 4780`), waits for `/server-info`, and stops it on quit. A daemon that is already running is reused.
+- **Risk:** upstream's Windows checks are automated, not done on real Dante gear, so Phase 2 includes a hardware smoke test. If the daemon couldn't be bundled at all, the fallback is linking upstream's C library `netaudio-core` (`packages/netaudio-core/include/netaudio_core.h`), not a full rewrite.
+- **Check:** in Phase 0, CI extracts the daemon on `windows-latest`, runs `--help`, starts it and calls `GET /server-info`.
+
 ### 4. Channel listening (new feature)
 **User experience**
 - Every transmit and receive channel, in the matrix headers and on device pages, gets a 🎧 listen button. One channel plays at a time, plus optional "add to mix" for up to 4 at once.
