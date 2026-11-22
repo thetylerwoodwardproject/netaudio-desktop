@@ -1,8 +1,7 @@
-__pycache__/
-*.pyc
 build/
+out/
 dist/
-*.egg-info/
-*.deb
-*.snap
-.netaudio-wheel/
+.vs/
+.vscode/
+*.user
+compile_commands.json

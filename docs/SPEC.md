@@ -1,169 +1,203 @@
-# NetAudio Monitor for Windows: spec and phased plan
+# NetAudio Monitor: spec and phased plan
 
-Mockup: https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A (two screens: **Levels and live listen**, and **Listen sources**).
+**Mockup:** https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A. It has two screens: **Levels** and **Flows**.
 
 ## Context
 
-Dante Controller already handles routing and configuration on Windows. This app does not compete with it. It is a **read-only monitor**:
+NetAudio Monitor is a **read-only Dante level meter** for Windows and Linux, rebuilt from scratch. The previous Linux GTK app has been removed. It is still in git history if anyone needs it for reference.
 
-1. Show live audio levels for every transmit and receive channel on the Dante network.
-2. Let you listen live to any feed it can reach.
-3. **Never change anything in production.** No routing, no flows, no subscriptions, no device settings.
+What it does:
+1. **Live dBFS levels** for every transmit and receive channel on the network, as reported by each device.
+2. **Listening to feeds that are already multicast or AES67.** It joins them passively, like any other listener.
+3. **Never changes anything in production.**
+   - No routing, subscriptions or flows are created or deleted.
+   - No device settings are touched.
+   - Unicast feeds are levels only.
 
-It replaces the current Linux GTK app (`netaudio_desktop/`). Linux support and every mention of it are removed. Windows (x64) is the only platform. The UI is native C++ with Dear ImGui on DirectX 11, in the same shadcn zinc dark style as podstudio.
+Routing and configuration stay in Dante Controller.
 
 ## 1. Product
 
 | Item | Spec |
 |---|---|
-| Name | NetAudio Monitor (the repo can keep its name) |
-| Platform | Windows 10 22H2+ / 11, x64 |
-| Scope | Read-only: discovery, levels, clock status, listen. Routing and configuration stay in Dante Controller. |
-| Architecture | ImGui app → C++ core → bundled `netaudio-daemon.exe`, run privately (local HTTP/SSE) → Dante devices. For listening, the core receives audio packets itself. |
-| Distribution | Signed Inno Setup installer plus a portable `.zip` |
+| Name | NetAudio Monitor |
+| Platforms | Windows 10 22H2+ / 11 (x64); Linux x86_64 (Ubuntu 22.04+ or equivalent, X11 or Wayland) |
+| UI | Native C++17 with Dear ImGui. DirectX 11 on Windows, GLFW + OpenGL 3.3 on Linux. Same look on both. |
+| Architecture | App → C++ core → bundled `netaudio-daemon`, run in `--private` mode (local HTTP/SSE) → Dante devices. For listening, the core joins multicast/AES67 groups itself. |
+| Distribution | Windows: signed Inno Setup installer plus a portable `.zip`. Linux: `.deb` and AppImage. |
 | Versioning | Calendar versions `YYYY.MM.DD`, from one `VERSION` file |
 | License | MIT. The daemon is Unlicense and bundled with attribution. |
 
 ## 2. Features
 
-**Levels (main screen)**
-- One card per device, showing its name, model, IP, format and clock state (leader / locked / not locked).
-- Transmit channels: number, name, a live meter and the dBFS reading.
-- Receive channels: name, source ("← Stagebox-A · 1 Kick") and the source's level. "Not subscribed" when it has no source.
-- Meter colours: green for signal, amber above −12 dBFS, red at clip.
-- A summary row: devices online, channels with signal, hot or clipping count, clock leader.
-- Filters (All / With signal / Listenable) and a search box (`Ctrl+K`).
+### Levels (main screen)
+- **Device cards.** One card per device showing name, model, IP, sample rate / bit depth and clock state (leader / locked / not locked).
+- **Channel rows.** Each row has:
+  - the channel number and name;
+  - a flow label underneath ("Multicast · 239.255.12.4", "AES67 · …" or "Unicast · levels only");
+  - a meter, the current dBFS value and a peak value;
+  - a listen button, shown only for multicast or AES67 channels.
+- **Receive channels** also show their source ("← Stagebox-A · 5 Bass DI · unicast"). The level shown is the one the receiving device measures. "Not subscribed" is shown when a channel has no source.
+- **dBFS values.**
+  - Meters are mapped through the daemon's `metering_scale`. Device meters report in 0.5 dB steps, so values show one decimal place ("−18.5").
+  - Special states: **CLIP** (red), "—" for below threshold or no signal (dimmed), and "muted".
+- **Meter.**
+  - Linear in dB from −60 to 0 dBFS, with scale labels (−60, −40, −20, −12, 0) and a tick at −12.
+  - Green below −12, amber from −12 to −3, red above −3 or on clip.
+  - A peak-hold marker and peak value that hold for 2 s, adjustable in Settings.
+- **Summary cards:**
+  - channels with signal;
+  - the loudest feed, with its dBFS;
+  - clips in the last 10 minutes and which channel clipped (kept in memory for the session);
+  - clock status and leader.
+- **Filters:** All channels / With signal / Above −12 dBFS / Can listen, plus search (`Ctrl+K`).
 
-**Listen**
-- Every channel row has a headphones button. One click plays it; clicking again or Stop ends it.
-- Listening to a receive channel plays the transmit channel it is subscribed to.
-- The listen bar at the bottom shows the source, how it is being heard, a level meter, volume, the output device, the latency (about 30–60 ms) and Stop.
-- Channels the app can't reach passively have a disabled button with a tooltip explaining why (for example "Unicast flow: turn on mirror capture to hear it").
+### Listen (multicast and AES67 only)
+- Pressing the headphones on a channel joins its existing multicast group or AES67 stream and plays it.
+- For a receive channel, it plays the source the channel is subscribed to, but only if that source is multicast or AES67.
+- **Listen bar:**
+  - source name and path ("Existing multicast flow 239.255.12.4 · passive");
+  - a large dBFS meter with the current reading and peak;
+  - volume, output device, Stop, and an approximate latency (about 30–60 ms).
+- Unicast channels have no listen button. A tooltip says "Unicast flow: levels only".
 
-**Listen sources screen**
-- The three passive methods and whether each is ready.
-- A table of the flows on the network: source, channels, multicast/AES67/unicast, destination, format, and whether they can be heard.
-- A short guide to setting up a mirror port.
+### Flows screen
+- **Counts:** multicast and AES67 flows marked "Can listen", and unicast flows marked "Levels only".
+- **Table:** source, channels, type, destination, format, levels (yes) and listen (yes/no).
+- **Note** explaining where levels come from.
 
-**Also:** a Clock page (read-only PTP status, from the existing `clock.py` logic), Settings (the Dante adapter, the mirror adapter, the output device, buffer size, meter rate), About/credits, and a demo mode (`--demo`) with simulated devices and synthesised audio.
+### Other pages
+- **Clock:** read-only PTP status per device, and which device is the leader.
+- **Settings:**
+  - Dante network adapter, output device, listen buffer;
+  - peak-hold time, meter refresh rate, meter colour thresholds;
+  - daemon port.
+- **About:** credits, including NetAudio upstream and the Dante trademark notice.
+- **Demo mode** (`--demo`): simulated devices and levels, and synthesised audio for the listenable channels.
 
-**Removed from the old app:** routing matrix, renaming, presets, audio/gain settings, preferred leader, network-interface changes on the daemon side, identify.
+## 3. Read-only guarantee
+- **Allowlisted API client.** `DaemonClient` contains only:
+  - Reads: `GET /server-info`, `GET /devices`, `GET /settings`, `GET /issues`, `GET /external-flows` and the `GET /events` stream (meters).
+  - Meter control: `POST /metering/start` and `/metering/stop`.
 
-## 3. How "never changes anything" is enforced
-
-- **Allowlisted API client.** The C++ `DaemonClient` exposes only:
-  - Reads: `GET /server-info`, `GET /devices`, `GET /settings`, `GET /issues`, and the `GET /events` live stream.
-  - `POST /metering/start` and `/metering/stop`.
-
-  No other endpoint exists in the code, so there's nothing for a bug to call. A unit test fails the build if a non-allowlisted path appears.
-- **Metering is the one request sent to devices.** It asks a device to send its meter values, as Dante Controller's own meters do. It doesn't touch audio, routing or settings. The app stops metering on quit.
-- **Listening sends nothing to devices.**
-  - Multicast and AES67: the app only joins the group. The switch receives an IGMP membership report, and no device is contacted.
-  - Mirror capture: the mirror adapter is receive-only. The app never transmits on it.
+  No other endpoint exists in the code. A unit test fails the build if any other path appears.
+- **Metering is the only request sent to devices.** It asks a device for its meter values, as Dante Controller's own meters do. It doesn't affect audio, routing or settings. Metering stops on quit.
+- **Listening only joins groups.** The app sends an IGMP membership report to the switch, and no device is contacted. The app never sends audio-plane traffic.
 - **Private daemon.** The bundled daemon runs with `--private`. In that mode it:
-  - exits when the app does (it watches the app's stdin pipe);
-  - uses a random local metering port, so it doesn't clash with Dante Controller on UDP 8752;
-  - doesn't announce itself on the network, and turns off its MCP server.
+  - exits when the app does;
+  - uses a random metering port, so it doesn't clash with Dante Controller on UDP 8752;
+  - doesn't announce itself, and has no MCP server.
 
-  The app passes `--interface` for the chosen Dante adapter.
+  The app passes `--interface` for the chosen adapter.
 
-## 4. Daemon on Windows (bundled, not rewritten)
-- Upstream NetAudio already ships a `windows-x86_64` build. Its CI builds and tests on `windows-latest`, and the daemon has `#[cfg(windows)]` code. Only the virtual soundcard, the JACK/PulseAudio bridge and the video tools are Linux-only, and this app uses none of them.
-- Re-implementing Dante discovery and metering in C++ would be months of reverse-engineered protocol work, and would cut us off from upstream fixes. So we bundle the daemon instead.
-- CI downloads the pinned `netaudio` `win_amd64` wheel from PyPI, checks its SHA-256 and extracts `netaudio-daemon.exe`. The fallback is building it from the pinned upstream tag with `cargo build -p netaudio-daemon --release`.
-- The installer puts it in `C:\Program Files\NetAudio Monitor\daemon\` and adds an Unlicense notice to `NOTICE`.
-- `DaemonSupervisor` starts it hidden (`CREATE_NO_WINDOW`) and waits for `/server-info`.
+## 4. Daemon (bundled, not rewritten)
+- **Upstream already builds for both platforms.** NetAudio (chris-ritsen/network-audio-controller, Unlicense) releases `windows-x86_64` and manylinux `x86_64` builds of the native Rust `netaudio-daemon`, and its CI tests Linux and Windows.
+- **Not rewriting it.** Re-implementing Dante discovery and metering would be months of protocol work and would cut us off from upstream fixes.
+- **Fetching it in CI:**
+  - Download the pinned `netaudio` wheel for each platform from PyPI, check its SHA-256, and extract `netaudio-daemon` / `netaudio-daemon.exe`.
+  - Fallback: `cargo build -p netaudio-daemon --release` from the pinned upstream tag.
+- **Install location:**
+  - Windows: `C:\Program Files\NetAudio Monitor\daemon\`.
+  - Linux: `/usr/lib/netaudio-monitor/` (`.deb`) or inside the AppImage.
+- **Running it.** `DaemonSupervisor` starts it hidden and waits for `/server-info`. It also owns its stdin pipe, which is how the daemon knows to exit.
 
-## 5. Listening pipeline (C++ core)
+## 5. C++ core
+- **`DaemonClient`:** HTTP via WinHTTP on Windows and a small POSIX socket client on Linux (the daemon is localhost-only, plain HTTP). JSON via nlohmann/json.
+- **`MeterFeed`:** an SSE reader for `/events?meters=1&telemetry=none&patches=0`.
+  - Reads `metering_scale.detailed` from the first snapshot. Raw value 0 means clip, 1 means 0 dBFS, then each step is −0.5 dB; 254 means muted and 255 is a marker.
+  - Merges partial `meter_values` updates per device.
+  - Treats readings as stale after 3 s, and reconnects after 2 s.
+  - Keeps the peak hold and the clip history.
+- **`FlowMap`:** builds, from `/devices` and `/external-flows`, a map of each channel to its flow: unicast, or multicast/AES67 with group, port, slot and format. Receive channels map through their subscriptions. Phase 0 confirms which fields the daemon reports.
+- **Listening:**
+  - **Joining:** `MulticastReceiver` joins the group on the Dante adapter (Winsock on Windows, BSD sockets on Linux).
+  - **Decoding:** `NativeDecoder` is ported from netaudio-endpoint's multicast receive code (`packages/netaudio-endpoint/src/receive.rs`, Unlicense, credited). `RtpDecoder` handles AES67 (RFC 3550, L16/L24).
+  - **Buffering:** a 20 ms jitter buffer (adjustable from 5 to 100 ms) fills lost packets with silence.
+  - **Clock drift:** a drift-servoed resampler from miniaudio.
+  - **Output:** miniaudio — WASAPI on Windows; PipeWire, PulseAudio or ALSA on Linux.
+- **Demo:** `DemoSource` simulates devices, flows and levels, and synthesises audio.
+- **Config:**
+  - Windows: `%APPDATA%\NetAudio Monitor\config.json`.
+  - Linux: `$XDG_CONFIG_HOME/netaudio-monitor/config.json`.
 
-| Method | When | How | Setup |
-|---|---|---|---|
-| **Multicast flow** | The source already sends this channel in a multicast flow | Join the group on the Dante adapter (Winsock `IP_ADD_MEMBERSHIP`) | None |
-| **AES67 stream** | The device has AES67 on and announces the stream with SAP | Join the SDP's group; RTP L24/L16 (RFC 3550) | None |
-| **Mirror capture** | Unicast flows, which are most production routing | A raw socket on the mirror adapter (`SIO_RCVALL`, needs admin) filters UDP to the flow's destination and port. If the user has installed Npcap, it can be used instead; it is not bundled because of its licence. | A switch mirror (SPAN) port into a second network adapter |
-
-- **Finding a channel:** `/devices` gives the subscriptions (receive channel → source device and channel) and the flow details. The core builds a map from transmit channel to flow (address, port, slot) for each method. Phase 0 confirms exactly which flow fields the daemon reports.
-- **Decoding:** `Native2Decoder` is a C++ port of netaudio-endpoint's native PCM receive code (`packages/netaudio-endpoint/src/receive.rs`, Unlicense, credited). It handles 16/24/32-bit samples, sequence numbers and timestamps. `RtpDecoder` handles AES67.
-- **Playback:** a 20 ms jitter buffer (5–100 ms in Settings) with silence for lost packets. A drift-servoed resampler (miniaudio) converts to the output rate, and output goes through WASAPI shared mode with volume, mute and a soft limiter.
-- **Can't be heard:** encrypted flows; unicast flows whose switch port isn't mirrored; mirrors that drop packets because they are overloaded. The UI says which applies.
-
-## 6. Design system (shadcn zinc, dark)
-- **Colours** (from podstudio `native/app/theme.h`, kept in `design/tokens.json`):
+## 6. Design system (shadcn zinc, dark only)
+- **Colour tokens** (in `design/tokens.json`, generated into a C++ header):
 
   | Token | Value | Token | Value |
   |---|---|---|---|
   | bg | `#09090b` | card | `#0f0f11` |
   | raised | `#18181b` | line | `#27272a` |
-  | line-2 | `#3f3f46` | text | `#fafafa` |
+  | line-2 | `#3f3f46` | meter-track | `#1f1f23` |
+  | text | `#fafafa` | text-2 | `#d4d4d8` |
   | dim | `#a1a1aa` | accent | `#3b82f6` |
   | ok | `#22c55e` | warn | `#f59e0b` |
   | clip | `#ef4444` | | |
 
-- **Type:** Inter 400/500/600; JetBrains Mono (or Cousine) for numbers, dB and IPs. Fonts are embedded in the exe.
-- **Shape:** radius 8 px for controls and 12 px for cards. 1 px borders, no shadows, 4 px spacing grid.
+- **Type:** Inter 400/500/600 for text; JetBrains Mono for dBFS values, IPs and numbers, with tabular figures. Both fonts are embedded in the app.
+- **Shape:**
+  - Radius: 8 px for controls, 12 px for cards, 999 px for pills.
+  - 1 px borders, no shadows, 4 px spacing grid.
 - **Layout:**
-  - Left sidebar: Levels, Listen sources, Clock, Settings, plus a "Read-only" card and the engine/adapter status.
-  - Header with title, search and the mirror-capture switch.
-  - Summary cards, filter chips, a grid of device cards, and the listen bar docked at the bottom.
-- **Components** (build on podstudio `widgets.h`): button (primary/secondary/ghost), chip, switch, badge, card, meter, table, select, slider, tooltip, toast.
-- **Windows:** dark titlebar via DWM, per-monitor DPI v2, keyboard navigation.
-- **Shortcuts:**
-  - Pages and search: `Ctrl+1..4`, `Ctrl+K`.
-  - Listening: `L` listens to the selected channel, `Esc` stops, `M` mutes.
-  - Quit: `Ctrl+Q`.
+  - **Sidebar:** Levels, Flows, Clock and Settings, plus a "Read-only" card and the metering/adapter status.
+  - **Main column:** a header with search, then summary cards, filter chips and a responsive grid of device cards (minimum 440 px wide).
+  - **Listen bar:** docked at the bottom.
+- **Components:** button (primary/secondary/ghost), chip, badge/pill, card, meter (row and large), table, select, slider, switch, tooltip, toast.
+- **Platform details:**
+  - Windows: dark titlebar via DWM.
+  - Both: per-monitor DPI scaling.
+  - Both: keyboard navigation throughout.
+- **Shortcuts:** `Ctrl+1..4` for pages, `Ctrl+K` for search, `L` to listen to the selected channel, `Esc` to stop, `M` to mute, `Ctrl+Q` to quit.
 
 ## 7. Repository layout (target)
 ```
 VERSION
-core/          C++17, no UI: api/ (read-only client, SSE), model/, logic/ (clock, meters), demo/, listen/ (sources, decoders, jitter, player), platform/ (WinHTTP, Winsock, raw capture), daemon/
-windows/       Win32 + DX11 + Dear ImGui app: theme, widgets, pages, .rc, manifest, installer/
-tests/         doctest unit tests, golden fixtures, packet-capture fixtures
-tools/         mock_daemon.py (dev only), daemon fetch script, screenshot script
-design/        tokens.json, icon.svg
-docs/          SPEC.md, screenshots/
-.github/       windows.yml (build + test), release.yml
+CMakeLists.txt
+core/        api/ (read-only client, SSE), model/, meters/, flows/, listen/ (receiver, decoders, jitter, player), daemon/, demo/, platform/ (win/, posix/)
+app/         ImGui UI: theme, widgets, pages (levels, flows, clock, settings, about), main_win32.cpp (DX11), main_linux.cpp (GLFW + OpenGL)
+tests/       doctest unit tests, packet-capture fixtures, mock_daemon.py (dev only)
+packaging/   windows/ (Inno Setup), linux/ (.deb, AppImage, .desktop, metainfo)
+design/      tokens.json, icon.svg
+docs/        SPEC.md, screenshots/
+.github/     ci.yml (Windows + Linux build/test), release.yml
 ```
-**Removed:** `netaudio_desktop/`, the `netaudio-desktop` launcher, `install.sh`, `packaging/build-deb.sh`, `snap/`, `data/*.desktop`, `data/*.metainfo.xml`, `data/icons/hicolor/`, `pyproject.toml`. The Python app stays in git history as a reference.
+**Dependencies** (pinned with CMake FetchContent): Dear ImGui 1.91.x, GLFW 3.4 (Linux), nlohmann/json 3.11.3, miniaudio 0.11.x, doctest.
 
 ## 8. Phases
 
-**Phase 0: clean-up and checks**
-- Capture golden fixtures from the Python `clock.py` and `meters.py` logic. Then delete the Linux artifacts, and rewrite the README for Windows.
-- Remove the Linux wording; `grep -rniI "linux\|gtk\|gnome\|adwaita\|snap\|\.deb\|cosmic\|flatpak"` must return nothing.
-- In CI on `windows-latest`, extract the pinned daemon, start it with `--private`, and call `/server-info`.
-- **Hardware check** on a Windows PC on a Dante network:
-  - the daemon's metering works while Dante Controller is metering the same device;
-  - record which flow fields `/devices` reports;
-  - capture a multicast flow and a mirrored unicast flow to commit as decoder fixtures.
+**Phase 0: foundation and hardware checks**
+- CMake skeleton and CI on `windows-latest` and `ubuntu-24.04`.
+- Fetch the pinned daemon on both, start it with `--private`, and check that `/server-info` responds.
+- On a real Dante network:
+  - Confirm metering works while Dante Controller (on Windows) is metering the same device.
+  - Record the meter scale.
+  - Record which flow fields `/devices` and `/external-flows` report.
+  - Capture one multicast flow and one AES67 stream as decoder fixtures.
 
-**Phase 1: C++ core**
-- The read-only `DaemonClient` with the allowlist test.
-- The SSE meter feed (a port of `meters.py`), the clock logic (a port of `clock.py`), `DemoClient`, `DaemonSupervisor`, and the config and paths code.
+**Phase 1: core**
+- `DaemonClient` with the allowlist test, `MeterFeed`, `FlowMap`, `DaemonSupervisor`, config and `DemoSource`.
 
-**Phase 2: Windows app, levels**
-- Win32/DX11/ImGui shell, adapted from podstudio's `main_win32.cpp`, `theme.*`, `widgets.*` and fonts.
-- The Levels screen exactly as in the mockup, plus the Clock and Settings pages and demo mode.
+**Phase 2: app, levels**
+- ImGui shells for both platforms and the theme and widgets.
+- The Levels screen as in the mockup, plus the Flows, Clock, Settings and About pages and demo mode.
 
-**Phase 3: listening (multicast and AES67)**
-- The source map, multicast join, SAP/SDP, the native and RTP decoders, the jitter buffer, the resampler, the WASAPI player, and the listen bar.
-- Demo mode synthesises audio.
+**Phase 3: listening**
+- `MulticastReceiver`, the native and RTP decoders, the jitter buffer, the resampler, the player and the listen bar.
 
-**Phase 4: mirror capture**
-- The raw-socket capture on the mirror adapter (with optional Npcap), unicast flow matching, the Listen sources screen, and the mirror setup guide.
-
-**Phase 5: release**
-- Inno Setup installer with firewall rules (inbound UDP, private networks, for the app and the daemon), signing, and an update check.
-- `release.yml` builds and publishes on a `v*` tag.
+**Phase 4: release**
+- Installer with a Windows Firewall rule (inbound UDP, private networks) for the app and the daemon, plus `.deb` and AppImage.
+- Signing, an update check, screenshots, and a release on `v*` tags.
 
 ## 9. Verification
-- **Unit tests** (`ctest` on `windows-latest`):
-  - golden-fixture parity with the Python logic;
+- **Unit tests** (`ctest` on both CI runners):
   - the allowlist test;
-  - decoders checked against the captured packets;
+  - meter-scale mapping and peak hold;
+  - flow-map building from captured `/devices` JSON;
+  - decoders checked against the packet fixtures;
   - jitter and drift simulation.
-- **Demo mode:** every mockup interaction works: filters, search, listen and stop, the mirror switch, volume.
-- **On hardware:**
-  - Levels match Dante Controller's meters.
-  - Listening works for multicast, AES67 and mirrored unicast.
-  - With Dante Controller open, its device view shows **no changes** to routing, flows or settings before, during or after a session.
-  - A packet capture on the Dante adapter shows the app sending only metering requests and IGMP joins.
+- **Demo mode:** every interaction in the mockup works.
+- **On hardware, on both operating systems:**
+  - dBFS values match Dante Controller's meters to within 0.5 dB.
+  - Multicast and AES67 feeds play.
+  - Unicast feeds show levels only.
+  - Dante Controller shows **no changes** before, during or after a session.
+  - A packet capture shows the app sends only metering requests and IGMP joins.
