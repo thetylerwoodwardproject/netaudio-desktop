@@ -1,6 +1,6 @@
 # NetAudio Monitor: spec and phased plan
 
-**Mockup:** https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A. It has two screens: **Levels** and **Flows**.
+**Mockup:** [`mockup/`](mockup/), built with shadcn/ui (`npm install && npm run dev`). Screens: **Levels**, **Flows**, **Clock**, **Settings** and **About**. **Roadmap:** [ROADMAP.md](ROADMAP.md).
 
 ## Context
 
@@ -32,8 +32,8 @@ Routing and configuration stay in Dante Controller.
 
 ### Levels (main screen)
 - **Device cards.** One card per device showing name, model, IP, sample rate / bit depth and clock state (leader / locked / not locked).
-- **Channel rows.** Each row has:
-  - the channel number and name;
+- **Channel rows.** One row per flow. A flow with two channels (a stereo pair, such as "1–2 Stage Mix") is one row with an L and an R meter; mono channels have one meter. Each row has:
+  - the channel number (or pair, "1–2") and name;
   - a flow label underneath ("Multicast · 239.255.12.4", "AES67 · …" or "Unicast · levels only");
   - a meter, the current dBFS value and a peak value;
   - a listen button, shown only for multicast or AES67 channels.
@@ -157,12 +157,14 @@ app/         ImGui UI: theme, widgets, pages (levels, flows, clock, settings, ab
 tests/       doctest unit tests, packet-capture fixtures, mock_daemon.py (dev only)
 packaging/   windows/ (Inno Setup), linux/ (.deb, AppImage, .desktop, metainfo)
 design/      tokens.json, icon.svg
-docs/        SPEC.md, screenshots/
+docs/        README.md, SPEC.md, ROADMAP.md, mockup/ (shadcn/ui, screenshots/)
 .github/     ci.yml (Windows + Linux build/test), release.yml
 ```
 **Dependencies** (pinned with CMake FetchContent): Dear ImGui 1.91.x, GLFW 3.4 (Linux), nlohmann/json 3.11.3, miniaudio 0.11.x, doctest.
 
 ## 8. Phases
+
+The same phases, grouped as Now / Next / Later, are in [ROADMAP.md](ROADMAP.md).
 
 **Phase 0: foundation and hardware checks**
 - CMake skeleton and CI on `windows-latest` and `ubuntu-24.04`.
