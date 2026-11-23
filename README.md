@@ -11,11 +11,12 @@ A read-only meter for every transmit and receive channel on your Dante network, 
 ![Dear ImGui](https://img.shields.io/badge/UI-Dear%20ImGui-a1a1aa?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 
-[**View the mockup**](https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A) ·
-[Spec & plan](docs/SPEC.md) ·
+[**Mockup**](docs/mockup) ·
+[Spec](docs/SPEC.md) ·
+[Roadmap](docs/ROADMAP.md) ·
 [Features](#-features) ·
 [How it works](#-how-it-works) ·
-[Roadmap](#-roadmap)
+[Phases](#-roadmap)
 
 </div>
 
@@ -24,7 +25,7 @@ A read-only meter for every transmit and receive channel on your Dante network, 
 
 > [!NOTE]
 > **Being rebuilt from scratch.** There is nothing to download yet. The design and plan are in [`docs/SPEC.md`](docs/SPEC.md),
-> and the [mockup](https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A) shows the screens it is building toward.
+> and the [mockup](docs/mockup) shows the screens it is building toward.
 
 ---
 
@@ -43,12 +44,15 @@ A read-only meter for every transmit and receive channel on your Dante network, 
 
 ## 🖥️ Design
 
-Dark, minimal and shadcn-inspired: the zinc palette, Inter and JetBrains Mono, 1 px borders and no clutter. Two main screens:
+Dark, minimal and built on [shadcn/ui](https://ui.shadcn.com): the zinc palette, Inter and JetBrains Mono, 1 px borders and no clutter.
 
-- **Levels:** device cards with a meter, dBFS and peak on every channel, and a listen bar docked at the bottom.
+- **Levels:** device cards with a meter, dBFS and peak on every channel (a stereo pair shows as one row with L and R), and a listen bar docked at the bottom.
 - **Flows:** every audio flow on the network, its type, and whether it can be heard.
+- **Clock** and **Settings**.
 
-👉 [**Open the interactive mockup**](https://claude.ai/artifact/NxRLrazjCsEf6ZerV3BJ1A)
+<img src="docs/mockup/screenshots/levels.png" alt="Levels screen of the mockup" width="900">
+
+The mockup runs with `npm install && npm run dev` in [`docs/mockup`](docs/mockup).
 
 ## 🔧 How it works
 
@@ -75,7 +79,7 @@ Dark, minimal and shadcn-inspired: the zinc palette, Inter and JetBrains Mono, 1
 | **3 · Listen** | Multicast and AES67 receive, jitter buffer, playback |
 | **4 · Release** | Windows installer, `.deb` and AppImage, signed releases |
 
-Full detail: [`docs/SPEC.md`](docs/SPEC.md).
+Full detail: [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/SPEC.md`](docs/SPEC.md).
 
 ## 💻 Platforms
 
