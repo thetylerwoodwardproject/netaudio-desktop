@@ -2,6 +2,7 @@ import * as React from "react"
 import { Activity, Clock, Eye, GitBranch, Settings } from "lucide-react"
 
 import { AppShell } from "@/components/app-shell"
+import { BrandIcon, brandTile } from "@/brand"
 import { ListenBar } from "@/components/listen-bar"
 import { StatusPill } from "@/components/status-pill"
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
@@ -18,7 +19,7 @@ export default function App() {
   const page = route.split("/")[0]
   return (
     <AppShell
-      brand={{ name: "NetAudio Monitor", context: "Dante network", icon: Activity }}
+      brand={{ name: "NetAudio Monitor", context: "Dante network", icon: BrandIcon, tileClassName: brandTile }}
       groups={[{ label: "Monitor", items: [
         { id: "levels", label: "Levels", icon: Activity },
         { id: "flows", label: "Flows", icon: GitBranch },

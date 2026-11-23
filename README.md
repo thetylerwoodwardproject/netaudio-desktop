@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/images/icon.svg" width="96" height="96" alt="NetAudio Monitor icon">
+
 # NetAudio Monitor
 
 **Live Dante levels, without touching the show.**<br>
