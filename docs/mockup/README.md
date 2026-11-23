@@ -18,7 +18,7 @@ A clickable mockup built with [shadcn/ui](https://ui.shadcn.com) (zinc, Inter an
 | `#/settings` | Settings | Network, audio, meters, daemon |
 | `#/about` | About | Credits and trademark notice |
 
-Dark only, as in the spec. The theme switch is hidden. Below 768 px it switches to the phone layout, where the sidebar becomes a sheet; `phone-*.png` in `screenshots/` shows it.
+Dark only, as in the spec. The theme switch is hidden.
 
 ## Run it
 

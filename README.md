@@ -40,16 +40,14 @@ A read-only meter for every channel on your Dante network, with live listening t
 
 <table>
   <tr>
-    <td width="30%"><img src="docs/mockup/screenshots/flows.png" alt="Flows screen"></td>
-    <td width="30%"><img src="docs/mockup/screenshots/clock.png" alt="Clock screen"></td>
-    <td width="30%"><img src="docs/mockup/screenshots/settings.png" alt="Settings screen"></td>
-    <td width="10%"><img src="docs/mockup/screenshots/phone-levels-dark.png" alt="Levels on a phone"></td>
+    <td width="33%"><img src="docs/mockup/screenshots/flows.png" alt="Flows screen"></td>
+    <td width="33%"><img src="docs/mockup/screenshots/clock.png" alt="Clock screen"></td>
+    <td width="33%"><img src="docs/mockup/screenshots/settings.png" alt="Settings screen"></td>
   </tr>
   <tr>
     <td align="center"><sub><b>Flows</b></sub></td>
     <td align="center"><sub><b>Clock</b></sub></td>
     <td align="center"><sub><b>Settings</b></sub></td>
-    <td align="center"><sub><b>Phone</b></sub></td>
   </tr>
 </table>
 
