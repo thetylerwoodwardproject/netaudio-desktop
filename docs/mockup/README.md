@@ -6,7 +6,7 @@ A clickable mockup built with [shadcn/ui](https://ui.shadcn.com) (zinc, Inter an
 
 ![flows](screenshots/flows.png)
 
-![clock](screenshots/clock.png)
+![settings](screenshots/settings.png)
 
 ## Screens
 
@@ -18,7 +18,7 @@ A clickable mockup built with [shadcn/ui](https://ui.shadcn.com) (zinc, Inter an
 | `#/settings` | Settings | Network, audio, meters, daemon |
 | `#/about` | About | Credits and trademark notice |
 
-Dark only, as in the spec. The theme switch is hidden. Resize below 768 px for the phone layout (the sidebar becomes a sheet).
+Dark only, as in the spec. The theme switch is hidden. Below 768 px it switches to the phone layout, where the sidebar becomes a sheet; `phone-*.png` in `screenshots/` shows it.
 
 ## Run it
 

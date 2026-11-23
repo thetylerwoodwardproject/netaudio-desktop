@@ -1,6 +1,42 @@
 [
-  { "file": "levels", "route": "levels", "theme": "dark", "width": 1440, "height": 1280, "fullPage": false },
-  { "file": "flows", "route": "flows", "theme": "dark", "width": 1440, "height": 800, "fullPage": false },
-  { "file": "clock", "route": "clock", "theme": "dark", "width": 1440, "height": 600, "fullPage": false },
-  { "file": "settings", "route": "settings", "theme": "dark", "width": 1440, "height": 1100, "fullPage": false }
+  {
+    "file": "levels",
+    "route": "levels",
+    "theme": "dark",
+    "width": 1440,
+    "height": 1280,
+    "fullPage": false
+  },
+  {
+    "file": "flows",
+    "route": "flows",
+    "theme": "dark",
+    "width": 1440,
+    "height": 800,
+    "fullPage": false
+  },
+  {
+    "file": "clock",
+    "route": "clock",
+    "theme": "dark",
+    "width": 1440,
+    "height": 600,
+    "fullPage": false
+  },
+  {
+    "file": "settings",
+    "route": "settings",
+    "theme": "dark",
+    "width": 1440,
+    "height": 1100,
+    "fullPage": false
+  },
+  {
+    "file": "phone-levels-dark",
+    "route": "levels",
+    "theme": "dark",
+    "width": 390,
+    "height": 844,
+    "fullPage": false
+  }
 ]
